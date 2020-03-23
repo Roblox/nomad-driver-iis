@@ -55,3 +55,6 @@ replace github.com/ugorji/go => github.com/hashicorp/go-msgpack v0.0.0-201909271
 
 // fix the version of hashicorp/go-msgpack to 96ddbed8d05b
 replace github.com/hashicorp/go-msgpack => github.com/hashicorp/go-msgpack v0.0.0-20191101193846-96ddbed8d05b
+
+// nomad is using an altered version of go-winio
+replace github.com/Microsoft/go-winio => github.com/endocrimes/go-winio v0.4.13-0.20190628114223-fb47a8b41948

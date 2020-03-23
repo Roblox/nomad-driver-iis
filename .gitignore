@@ -1,2 +1,2 @@
-nomad-skeleton-driver-plugin
-hello-driver
+.vagrant/
+*.exe
