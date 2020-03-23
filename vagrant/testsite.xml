@@ -1,0 +1,6 @@
+<appcmd>
+    <SITE state="Started">
+        <site name="test12" id="1">
+        </site>
+    </SITE>
+</appcmd>

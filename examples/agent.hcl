@@ -1,6 +1,6 @@
 log_level = "TRACE"
 
-plugin "nomad-driver-iis" {
+plugin "win_iis" {
   config {
     shell = "bash"
   }

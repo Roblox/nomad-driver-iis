@@ -24,7 +24,7 @@ const (
 	// pluginName is the name of the plugin
 	// this is used for logging and (along with the version) for uniquely
 	// identifying plugin binaries fingerprinted by the client
-	pluginName = "nomad-driver-iis"
+	pluginName = "win_iis"
 
 	// pluginVersion allows the client to identify and use newer versions of
 	// an installed plugin

@@ -4,7 +4,7 @@ job "iis-job" {
 
   group "iis-group" {
     task "iis-task" {
-      driver = "nomad-driver-iis"
+      driver = "win_iis"
 
       config {
         greeting = "iis"
