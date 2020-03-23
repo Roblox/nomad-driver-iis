@@ -1,6 +1,6 @@
 log_level = "TRACE"
 
-plugin "hello-driver" {
+plugin "nomad-driver-iis" {
   config {
     shell = "bash"
   }

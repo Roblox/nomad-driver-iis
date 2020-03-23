@@ -1,4 +1,4 @@
-package hello
+package iis
 
 import (
 	"context"
@@ -24,7 +24,7 @@ const (
 	// pluginName is the name of the plugin
 	// this is used for logging and (along with the version) for uniquely
 	// identifying plugin binaries fingerprinted by the client
-	pluginName = "hello-world-example"
+	pluginName = "nomad-driver-iis"
 
 	// pluginVersion allows the client to identify and use newer versions of
 	// an installed plugin
@@ -63,7 +63,7 @@ var (
 		//
 		// For example, for the schema below a valid configuration would be:
 		//
-		//   plugin "hello-driver-plugin" {
+		//   plugin "nomad-driver-iis" {
 		//     config {
 		//       shell = "fish"
 		//     }
@@ -89,7 +89,7 @@ var (
 		//   job "example" {
 		//     group "example" {
 		//       task "say-hi" {
-		//         driver = "hello-driver-plugin"
+		//         driver = "nomad-driver-iis"
 		//         config {
 		//           greeting = "Hi"
 		//         }
@@ -329,8 +329,8 @@ func (d *HelloDriverPlugin) buildFingerprint() *drivers.Fingerprint {
 		re := regexp.MustCompile("[0-9]\\.[0-9]\\.[0-9]")
 		version := re.FindString(string(out))
 
-		fp.Attributes["driver.hello.shell_version"] = structs.NewStringAttribute(version)
-		fp.Attributes["driver.hello.shell"] = structs.NewStringAttribute(shell)
+		fp.Attributes["driver.nomad-driver-iis.shell_version"] = structs.NewStringAttribute(version)
+		fp.Attributes["driver.nomad-driver-iis.shell"] = structs.NewStringAttribute(shell)
 	}
 
 	return fp
