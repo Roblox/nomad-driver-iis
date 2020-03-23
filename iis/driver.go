@@ -97,23 +97,33 @@ var (
 
 // Config contains configuration information for the plugin
 type Config struct {
-	// TODO: create decoded plugin configuration struct
-	//
-	// This struct is the decoded version of the schema defined in the
-	// configSpec variable above. It's used to convert the HCL configuration
-	// passed by the Nomad agent into Go contructs.
-	Shell string `codec:"shell"`
+	// Enabled is set to true to enable the win_iis driver
+	Enabled bool `codec:"enabled"`
 }
 
 // TaskConfig contains configuration information for a task that runs with
 // this plugin
 type TaskConfig struct {
-	// TODO: create decoded plugin task configuration struct
-	//
-	// This struct is the decoded version of the schema defined in the
-	// taskConfigSpec variable above. It's used to convert the string
-	// configuration for the task into Go contructs.
-	Greeting string `codec:"greeting"`
+	Path              string             `codec:"path"`
+	AppPoolConfigPath string             `codec:"apppool_config_path"`
+	SiteConfigPath    string             `codec:"site_config_path"`
+	AppPoolIdentity   IISAppPoolIdentity `codec:"apppool_identity"`
+	Bindings          []IISBinding       `codec:"bindings"`
+}
+
+type IISBinding struct {
+	IPAddress    string `codec:"ipaddress"`
+	HostName     string `codec:"hostname"`
+	Type         string `codec:"type"`
+	CertHash     string `codec:"cert_hash"`
+	ResourcePort string `codec:"port"`
+	Port         int
+}
+
+type IISAppPoolIdentity struct {
+	Identity string `codec:"identity"`
+	Username string `codec:"username"`
+	Password string `codec:"password"`
 }
 
 // TaskState is the runtime state which is encoded in the handle returned to
@@ -136,8 +146,8 @@ type TaskState struct {
 	Pid int
 }
 
-// IISDriver is a driver for running windows IIS tasks.
-type IISDriver struct {
+// Driver is a driver for running windows IIS tasks.
+type Driver struct {
 	// eventer is used to handle multiplexing of TaskEvents calls such that an
 	// event can be broadcast to all callers
 	eventer *eventer.Eventer
@@ -168,7 +178,7 @@ func NewIISDriver(logger hclog.Logger) drivers.DriverPlugin {
 	ctx, cancel := context.WithCancel(context.Background())
 	logger = logger.Named(pluginName)
 
-	return &IISDriver{
+	return &Driver{
 		eventer:        eventer.NewEventer(ctx, logger),
 		config:         &Config{},
 		tasks:          newTaskStore(),
@@ -179,17 +189,17 @@ func NewIISDriver(logger hclog.Logger) drivers.DriverPlugin {
 }
 
 // PluginInfo returns information describing the plugin.
-func (d *IISDriver) PluginInfo() (*base.PluginInfoResponse, error) {
+func (d *Driver) PluginInfo() (*base.PluginInfoResponse, error) {
 	return pluginInfo, nil
 }
 
 // ConfigSchema returns the plugin configuration schema.
-func (d *IISDriver) ConfigSchema() (*hclspec.Spec, error) {
+func (d *Driver) ConfigSchema() (*hclspec.Spec, error) {
 	return configSpec, nil
 }
 
 // SetConfig is called by the client to pass the configuration for the plugin.
-func (d *IISDriver) SetConfig(cfg *base.Config) error {
+func (d *Driver) SetConfig(cfg *base.Config) error {
 	var config Config
 	if len(cfg.PluginConfig) != 0 {
 		if err := base.MsgPackDecode(cfg.PluginConfig, &config); err != nil {
@@ -228,25 +238,25 @@ func (d *IISDriver) SetConfig(cfg *base.Config) error {
 }
 
 // TaskConfigSchema returns the HCL schema for the configuration of a task.
-func (d *IISDriver) TaskConfigSchema() (*hclspec.Spec, error) {
+func (d *Driver) TaskConfigSchema() (*hclspec.Spec, error) {
 	return taskConfigSpec, nil
 }
 
 // Capabilities returns the features supported by the driver.
-func (d *IISDriver) Capabilities() (*drivers.Capabilities, error) {
+func (d *Driver) Capabilities() (*drivers.Capabilities, error) {
 	return capabilities, nil
 }
 
 // Fingerprint returns a channel that will be used to send health information
 // and other driver specific node attributes.
-func (d *IISDriver) Fingerprint(ctx context.Context) (<-chan *drivers.Fingerprint, error) {
+func (d *Driver) Fingerprint(ctx context.Context) (<-chan *drivers.Fingerprint, error) {
 	ch := make(chan *drivers.Fingerprint)
 	go d.handleFingerprint(ctx, ch)
 	return ch, nil
 }
 
 // handleFingerprint manages the channel and the flow of fingerprint data.
-func (d *IISDriver) handleFingerprint(ctx context.Context, ch chan<- *drivers.Fingerprint) {
+func (d *Driver) handleFingerprint(ctx context.Context, ch chan<- *drivers.Fingerprint) {
 	defer close(ch)
 
 	// Nomad expects the initial fingerprint to be sent immediately
@@ -267,7 +277,7 @@ func (d *IISDriver) handleFingerprint(ctx context.Context, ch chan<- *drivers.Fi
 }
 
 // buildFingerprint returns the driver's fingerprint data
-func (d *IISDriver) buildFingerprint() *drivers.Fingerprint {
+func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 	fp := &drivers.Fingerprint{
 		Attributes:        map[string]*structs.Attribute{},
 		Health:            drivers.HealthStateHealthy,
@@ -316,7 +326,7 @@ func (d *IISDriver) buildFingerprint() *drivers.Fingerprint {
 }
 
 // StartTask returns a task handle and a driver network if necessary.
-func (d *IISDriver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drivers.DriverNetwork, error) {
+func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drivers.DriverNetwork, error) {
 	if _, ok := d.tasks.Get(cfg.ID); ok {
 		return nil, nil, fmt.Errorf("task with ID %q already started", cfg.ID)
 	}
@@ -397,7 +407,7 @@ func (d *IISDriver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *dr
 }
 
 // RecoverTask recreates the in-memory state of a task from a TaskHandle.
-func (d *IISDriver) RecoverTask(handle *drivers.TaskHandle) error {
+func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 	if handle == nil {
 		return fmt.Errorf("error: handle cannot be nil")
 	}
@@ -450,7 +460,7 @@ func (d *IISDriver) RecoverTask(handle *drivers.TaskHandle) error {
 }
 
 // WaitTask returns a channel used to notify Nomad when a task exits.
-func (d *IISDriver) WaitTask(ctx context.Context, taskID string) (<-chan *drivers.ExitResult, error) {
+func (d *Driver) WaitTask(ctx context.Context, taskID string) (<-chan *drivers.ExitResult, error) {
 	handle, ok := d.tasks.Get(taskID)
 	if !ok {
 		return nil, drivers.ErrTaskNotFound
@@ -461,7 +471,7 @@ func (d *IISDriver) WaitTask(ctx context.Context, taskID string) (<-chan *driver
 	return ch, nil
 }
 
-func (d *IISDriver) handleWait(ctx context.Context, handle *taskHandle, ch chan *drivers.ExitResult) {
+func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *drivers.ExitResult) {
 	defer close(ch)
 	var result *drivers.ExitResult
 
@@ -499,7 +509,7 @@ func (d *IISDriver) handleWait(ctx context.Context, handle *taskHandle, ch chan 
 }
 
 // StopTask stops a running task with the given signal and within the timeout window.
-func (d *IISDriver) StopTask(taskID string, timeout time.Duration, signal string) error {
+func (d *Driver) StopTask(taskID string, timeout time.Duration, signal string) error {
 	handle, ok := d.tasks.Get(taskID)
 	if !ok {
 		return drivers.ErrTaskNotFound
@@ -525,7 +535,7 @@ func (d *IISDriver) StopTask(taskID string, timeout time.Duration, signal string
 }
 
 // DestroyTask cleans up and removes a task that has terminated.
-func (d *IISDriver) DestroyTask(taskID string, force bool) error {
+func (d *Driver) DestroyTask(taskID string, force bool) error {
 	handle, ok := d.tasks.Get(taskID)
 	if !ok {
 		return drivers.ErrTaskNotFound
@@ -556,7 +566,7 @@ func (d *IISDriver) DestroyTask(taskID string, force bool) error {
 }
 
 // InspectTask returns detailed status information for the referenced taskID.
-func (d *IISDriver) InspectTask(taskID string) (*drivers.TaskStatus, error) {
+func (d *Driver) InspectTask(taskID string) (*drivers.TaskStatus, error) {
 	handle, ok := d.tasks.Get(taskID)
 	if !ok {
 		return nil, drivers.ErrTaskNotFound
@@ -566,7 +576,7 @@ func (d *IISDriver) InspectTask(taskID string) (*drivers.TaskStatus, error) {
 }
 
 // TaskStats returns a channel which the driver should send stats to at the given interval.
-func (d *IISDriver) TaskStats(ctx context.Context, taskID string, interval time.Duration) (<-chan *drivers.TaskResourceUsage, error) {
+func (d *Driver) TaskStats(ctx context.Context, taskID string, interval time.Duration) (<-chan *drivers.TaskResourceUsage, error) {
 	handle, ok := d.tasks.Get(taskID)
 	if !ok {
 		return nil, drivers.ErrTaskNotFound
@@ -584,13 +594,13 @@ func (d *IISDriver) TaskStats(ctx context.Context, taskID string, interval time.
 }
 
 // TaskEvents returns a channel that the plugin can use to emit task related events.
-func (d *IISDriver) TaskEvents(ctx context.Context) (<-chan *drivers.TaskEvent, error) {
+func (d *Driver) TaskEvents(ctx context.Context) (<-chan *drivers.TaskEvent, error) {
 	return d.eventer.TaskEvents(ctx)
 }
 
 // SignalTask forwards a signal to a task.
 // This is an optional capability.
-func (d *IISDriver) SignalTask(taskID string, signal string) error {
+func (d *Driver) SignalTask(taskID string, signal string) error {
 	handle, ok := d.tasks.Get(taskID)
 	if !ok {
 		return drivers.ErrTaskNotFound
@@ -613,7 +623,7 @@ func (d *IISDriver) SignalTask(taskID string, signal string) error {
 
 // ExecTask returns the result of executing the given command inside a task.
 // This is an optional capability.
-func (d *IISDriver) ExecTask(taskID string, cmd []string, timeout time.Duration) (*drivers.ExecTaskResult, error) {
+func (d *Driver) ExecTask(taskID string, cmd []string, timeout time.Duration) (*drivers.ExecTaskResult, error) {
 	// TODO: implement driver specific logic to execute commands in a task.
 	return nil, fmt.Errorf("This driver does not support exec")
 }
