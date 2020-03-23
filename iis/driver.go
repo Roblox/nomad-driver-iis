@@ -55,22 +55,9 @@ var (
 	// on the client.
 	// this is not global, but can be specified on a per-client basis.
 	configSpec = hclspec.NewObject(map[string]*hclspec.Spec{
-		// TODO: define plugin's agent configuration schema.
-		//
-		// The schema should be defined using HCL specs and it will be used to
-		// validate the agent configuration provided by the user in the
-		// `plugin` stanza (https://www.nomadproject.io/docs/configuration/plugin.html).
-		//
-		// For example, for the schema below a valid configuration would be:
-		//
-		//   plugin "win_iis" {
-		//     config {
-		//       shell = "fish"
-		//     }
-		//   }
-		"shell": hclspec.NewDefault(
-			hclspec.NewAttr("shell", "string", false),
-			hclspec.NewLiteral(`"bash"`),
+		"enabled": hclspec.NewDefault(
+			hclspec.NewAttr("enabled", "bool", false),
+			hclspec.NewLiteral("true"),
 		),
 	})
 
@@ -79,39 +66,32 @@ var (
 	// this is used to validated the configuration specified for the plugin
 	// when a job is submitted.
 	taskConfigSpec = hclspec.NewObject(map[string]*hclspec.Spec{
-		// TODO: define plugin's task configuration schema
-		//
-		// The schema should be defined using HCL specs and it will be used to
-		// validate the task configuration provided by the user when they
-		// submit a job.
-		//
-		// For example, for the schema below a valid task would be:
-		//   job "example" {
-		//     group "example" {
-		//       task "say-hi" {
-		//         driver = "win_iis"
-		//         config {
-		//           greeting = "Hi"
-		//         }
-		//       }
-		//     }
-		//   }
-		"greeting": hclspec.NewDefault(
-			hclspec.NewAttr("greeting", "string", false),
-			hclspec.NewLiteral(`"Hello, World!"`),
-		),
+		"path":                hclspec.NewAttr("path", "string", true),
+		"site_config_path":    hclspec.NewAttr("site_config_path", "string", false),
+		"apppool_config_path": hclspec.NewAttr("apppool_config_path", "string", false),
+		"apppool_identity": hclspec.NewBlock("apppool_identity", false, hclspec.NewObject(map[string]*hclspec.Spec{
+			"identity": hclspec.NewAttr("identity", "string", true),
+			"username": hclspec.NewAttr("username", "string", false),
+			"password": hclspec.NewAttr("password", "string", false),
+		})),
+		"bindings": hclspec.NewBlockList("bindings", hclspec.NewObject(map[string]*hclspec.Spec{
+			"hostname":  hclspec.NewAttr("hostname", "string", false),
+			"ipaddress": hclspec.NewAttr("ipaddress", "string", false),
+			"port":      hclspec.NewAttr("port", "string", false),
+			"type":      hclspec.NewAttr("type", "string", false),
+			"cert_hash": hclspec.NewAttr("cert_hash", "string", false),
+		})),
 	})
 
 	// capabilities indicates what optional features this driver supports
 	// this should be set according to the target run time.
 	capabilities = &drivers.Capabilities{
-		// TODO: set plugin's capabilities
-		//
 		// The plugin's capabilities signal Nomad which extra functionalities
 		// are supported. For a list of available options check the docs page:
 		// https://godoc.org/github.com/hashicorp/nomad/plugins/drivers#Capabilities
 		SendSignals: true,
 		Exec:        false,
+		FSIsolation: drivers.FSIsolationNone,
 	}
 )
 
