@@ -1,5 +1,6 @@
-PLUGIN_BINARY=hello-driver
+PLUGIN_BINARY=iis-driver.exe
 export GO111MODULE=on
+export GOOS=windows
 
 default: build
 
