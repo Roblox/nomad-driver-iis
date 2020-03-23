@@ -1,5 +1,4 @@
-// TODO: update the module path below to match your own repository
-module github.com/hashicorp/nomad-skeleton-driver-plugin
+module github.com/roblox/nomad-driver-iis
 
 go 1.12
 
