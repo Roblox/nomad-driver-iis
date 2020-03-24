@@ -89,7 +89,7 @@ var (
 		// The plugin's capabilities signal Nomad which extra functionalities
 		// are supported. For a list of available options check the docs page:
 		// https://godoc.org/github.com/hashicorp/nomad/plugins/drivers#Capabilities
-		SendSignals: true,
+		SendSignals: false,
 		Exec:        false,
 		FSIsolation: drivers.FSIsolationNone,
 	}
@@ -109,21 +109,6 @@ type TaskConfig struct {
 	SiteConfigPath    string             `codec:"site_config_path"`
 	AppPoolIdentity   IISAppPoolIdentity `codec:"apppool_identity"`
 	Bindings          []IISBinding       `codec:"bindings"`
-}
-
-type IISBinding struct {
-	IPAddress    string `codec:"ipaddress"`
-	HostName     string `codec:"hostname"`
-	Type         string `codec:"type"`
-	CertHash     string `codec:"cert_hash"`
-	ResourcePort string `codec:"port"`
-	Port         int
-}
-
-type IISAppPoolIdentity struct {
-	Identity string `codec:"identity"`
-	Username string `codec:"username"`
-	Password string `codec:"password"`
 }
 
 // TaskState is the runtime state which is encoded in the handle returned to
