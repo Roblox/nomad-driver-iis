@@ -1,6 +1,6 @@
 <appcmd>
-    <APPPOOL APPPOOL.NAME="test123" PipelineMode="Integrated" RuntimeVersion="v4.0" state="Started">
-        <add name="test123" autoStart="true" managedRuntimeVersion="v4.0">
+    <APPPOOL APPPOOL.NAME="test123" PipelineMode="Integrated" RuntimeVersion="" state="Started">
+        <add name="test123" autoStart="true" managedRuntimeVersion="">
         </add>
     </APPPOOL>
 </appcmd>

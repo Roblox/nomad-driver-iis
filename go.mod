@@ -37,6 +37,7 @@ require (
 	github.com/opencontainers/selinux v1.3.1 // indirect
 	github.com/seccomp/libseccomp-golang v0.9.1 // indirect
 	github.com/shirou/gopsutil v2.19.11+incompatible // indirect
+	github.com/stretchr/testify v1.3.0
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
 	github.com/ugorji/go v1.1.7 // indirect
 	github.com/vbatts/tar-split v0.11.1 // indirect
