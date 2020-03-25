@@ -102,15 +102,6 @@ type iisBinding struct {
 	Type         string `codec:"type"`
 }
 
-// Website configuration struct
-type iisWebsiteConfig struct {
-	AppPoolConfigPath string             `codec:"apppool_config_path"`
-	AppPoolIdentity   iisAppPoolIdentity `codec:"apppool_identity"`
-	Bindings          []iisBinding       `codec:"bindings"`
-	Path              string             `codec:"path"`
-	SiteConfigPath    string             `codec:"site_config_path"`
-}
-
 // Gets the exe version of InetMgr.exe
 func getVersion() (string, error) {
 	cmd := exec.Command("cmd", "/C", `wmic datafile where name='C:\\Windows\\System32\\inetsrv\\InetMgr.exe' get version`)
@@ -563,7 +554,7 @@ func applySiteAppPool(siteName string, appPoolName string) error {
 }
 
 // Creates an Application Pool and Site with the given configuration
-func createWebsite(webSiteName string, config iisWebsiteConfig) error {
+func createWebsite(webSiteName string, config *TaskConfig) error {
 	if err := createAppPool(webSiteName, config.AppPoolConfigPath); err != nil {
 		return err
 	}

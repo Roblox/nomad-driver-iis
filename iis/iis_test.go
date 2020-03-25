@@ -273,7 +273,7 @@ func TestWebsite(t *testing.T) {
 	}
 
 	// Basic config to be used for creating a website
-	config := iisWebsiteConfig{
+	config := &TaskConfig{
 		Path: "C:\\inetpub\\wwwroot",
 		AppPoolIdentity: iisAppPoolIdentity{
 			Identity: "SpecificUser",
