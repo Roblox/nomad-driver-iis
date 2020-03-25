@@ -443,25 +443,14 @@ func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *dr
 
 // StopTask stops a running task with the given signal and within the timeout window.
 func (d *Driver) StopTask(taskID string, timeout time.Duration, signal string) error {
+	d.logger.Info("win_iis task driver: Stop Task")
 	handle, ok := d.tasks.Get(taskID)
 	if !ok {
 		return drivers.ErrTaskNotFound
 	}
 
-	// TODO: implement driver specific logic to stop a task.
-	//
-	// The StopTask function is expected to stop a running task by sending the
-	// given signal to it. If the task does not stop during the given timeout,
-	// the driver must forcefully kill the task.
-	//
-	// In the example below we let the executor handle the task shutdown
-	// process for us, but you might need to customize this for your own
-	// implementation.
-	if err := handle.exec.Shutdown(signal, timeout); err != nil {
-		if handle.pluginClient.Exited() {
-			return nil
-		}
-		return fmt.Errorf("executor Shutdown failed: %v", err)
+	if err := handle.shutdown(); err != nil {
+		return fmt.Errorf("Error stopping iis task: %v", err)
 	}
 
 	return nil
