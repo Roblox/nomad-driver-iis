@@ -341,6 +341,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 
 // RecoverTask recreates the in-memory state of a task from a TaskHandle.
 func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
+	d.logger.Info("win_iis task driver: Recover Task")
 	if handle == nil {
 		return fmt.Errorf("error: handle cannot be nil")
 	}
@@ -359,31 +360,14 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		return fmt.Errorf("failed to decode driver config: %v", err)
 	}
 
-	// TODO: implement driver specific logic to recover a task.
-	//
-	// Recovering a task involves recreating and storing a taskHandle as if the
-	// task was just started.
-	//
-	// In the example below we use the executor to re-attach to the process
-	// that was created when the task first started.
-	plugRC, err := structs.ReattachConfigToGoPlugin(taskState.ReattachConfig)
-	if err != nil {
-		return fmt.Errorf("failed to build ReattachConfig from taskConfig state: %v", err)
-	}
-
-	execImpl, pluginClient, err := executor.ReattachToExecutor(plugRC, d.logger)
-	if err != nil {
-		return fmt.Errorf("failed to reattach to executor: %v", err)
-	}
-
 	h := &taskHandle{
-		exec:         execImpl,
-		pid:          taskState.Pid,
-		pluginClient: pluginClient,
-		taskConfig:   taskState.TaskConfig,
-		procState:    drivers.TaskStateRunning,
-		startedAt:    taskState.StartedAt,
-		exitResult:   &drivers.ExitResult{},
+		taskConfig:     taskState.TaskConfig,
+		procState:      drivers.TaskStateRunning,
+		startedAt:      taskState.StartedAt,
+		exitResult:     &drivers.ExitResult{},
+		logger:         d.logger,
+		pidCollector:   newPidCollector(d.logger),
+		systemCpuStats: stats.NewCpuStats(),
 	}
 
 	d.tasks.Set(taskState.TaskConfig.ID, h)
