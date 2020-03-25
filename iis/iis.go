@@ -284,7 +284,7 @@ func getAppPool(appPoolName string, allConfigs bool) (*appCmdAppPool, error) {
 // Returns all Application Pools that exist in IIS
 func getAppPools() ([]appCmdAppPool, error) {
 	if result, err := executeAppCmd("list", "apppool"); err != nil {
-		return result.AppPools, fmt.Errorf("Failed to get Application Pools: %v", err)
+		return nil, fmt.Errorf("Failed to get Application Pools: %v", err)
 	} else {
 		return result.AppPools, nil
 	}
@@ -663,7 +663,7 @@ func getNetshIP(ipAddress string) string {
 func bindSSLCert(appID string, ipAddress string, port int, hash string) error {
 	if info, err := getSSLCertBinding(ipAddress, port); err != nil {
 		return err
-	} else if len(info) != 0 && info["CertificateHash"] == hash {
+	} else if info["CertificateHash"] == hash {
 		return nil
 	}
 
