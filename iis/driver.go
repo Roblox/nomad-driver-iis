@@ -107,8 +107,8 @@ type TaskConfig struct {
 	Path              string             `codec:"path"`
 	AppPoolConfigPath string             `codec:"apppool_config_path"`
 	SiteConfigPath    string             `codec:"site_config_path"`
-	AppPoolIdentity   IISAppPoolIdentity `codec:"apppool_identity"`
-	Bindings          []IISBinding       `codec:"bindings"`
+	AppPoolIdentity   iisAppPoolIdentity `codec:"apppool_identity"`
+	Bindings          []iisBinding       `codec:"bindings"`
 }
 
 // TaskState is the runtime state which is encoded in the handle returned to
