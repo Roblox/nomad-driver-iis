@@ -116,7 +116,6 @@ type TaskConfig struct {
 // This information is needed to rebuild the task state and handler during
 // recovery.
 type TaskState struct {
-	allocId    string
 	TaskConfig *drivers.TaskConfig
 	StartedAt  time.Time
 }
@@ -302,6 +301,7 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 
 // StartTask returns a task handle and a driver network if necessary.
 func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drivers.DriverNetwork, error) {
+	d.logger.Info("win_iis task driver: Start Task.")
 	if _, ok := d.tasks.Get(cfg.ID); ok {
 		return nil, nil, fmt.Errorf("task with ID %q already started", cfg.ID)
 	}
@@ -311,68 +311,26 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		return nil, nil, fmt.Errorf("failed to decode driver config: %v", err)
 	}
 
-	d.logger.Info("starting task", "driver_cfg", hclog.Fmt("%+v", driverConfig))
+	d.logger.Info("starting iis task", "driver_cfg", hclog.Fmt("%+v", driverConfig))
 	handle := drivers.NewTaskHandle(taskHandleVersion)
 	handle.Config = cfg
 
-	// TODO: implement driver specific mechanism to start the task.
-	//
-	// Once the task is started you will need to store any relevant runtime
-	// information in a taskHandle and TaskState. The taskHandle will be
-	// stored in-memory in the plugin and will be used to interact with the
-	// task.
-	//
-	// The TaskState will be returned to the Nomad client inside a
-	// drivers.TaskHandle instance. This TaskHandle will be sent back to plugin
-	// if the task ever needs to be recovered, so the TaskState should contain
-	// enough information to handle that.
-	//
-	// In the example below we use an executor to fork a process to run our
-	// greeter. The executor is then stored in the handle so we can access it
-	// later and the the plugin.Client is used to generate a reattach
-	// configuration that can be used to recover communication with the task.
-	executorConfig := &executor.ExecutorConfig{
-		LogFile:  filepath.Join(cfg.TaskDir().Dir, "executor.out"),
-		LogLevel: "debug",
-	}
-
-	exec, pluginClient, err := executor.CreateExecutor(d.logger, d.nomadConfig, executorConfig)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create executor: %v", err)
-	}
-
-	echoCmd := fmt.Sprintf(`echo "%s"`, driverConfig.Greeting)
-	execCmd := &executor.ExecCommand{
-		Cmd:        d.config.Shell,
-		Args:       []string{"-c", echoCmd},
-		StdoutPath: cfg.StdoutPath,
-		StderrPath: cfg.StderrPath,
-	}
-
-	ps, err := exec.Launch(execCmd)
-	if err != nil {
-		pluginClient.Kill()
-		return nil, nil, fmt.Errorf("failed to launch command with executor: %v", err)
-	}
-
 	h := &taskHandle{
-		exec:         exec,
-		pid:          ps.Pid,
-		pluginClient: pluginClient,
-		taskConfig:   cfg,
-		procState:    drivers.TaskStateRunning,
-		startedAt:    time.Now().Round(time.Millisecond),
-		logger:       d.logger,
+		taskConfig:     cfg,
+		procState:      drivers.TaskStateRunning,
+		startedAt:      time.Now().Round(time.Millisecond),
+		logger:         d.logger,
+		pidCollector:   newPidCollector(d.logger),
+		systemCpuStats: stats.NewCpuStats(),
 	}
 
 	driverState := TaskState{
-		ReattachConfig: structs.ReattachConfigFromGoPlugin(pluginClient.ReattachConfig()),
-		Pid:            ps.Pid,
-		TaskConfig:     cfg,
-		StartedAt:      h.startedAt,
+		TaskConfig: cfg,
+		StartedAt:  h.startedAt,
 	}
 
 	if err := handle.SetDriverState(&driverState); err != nil {
+		d.logger.Error("failed to start task, error setting driver state", "error", err)
 		return nil, nil, fmt.Errorf("failed to set driver state: %v", err)
 	}
 
