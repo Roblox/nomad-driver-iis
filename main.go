@@ -15,5 +15,5 @@ func main() {
 
 // factory returns a new instance of a nomad driver plugin
 func factory(log log.Logger) interface{} {
-	return iis.NewPlugin(log)
+	return iis.NewIISDriver(log)
 }
