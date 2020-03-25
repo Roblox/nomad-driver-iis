@@ -22,12 +22,6 @@ advertise {
     serf = "172.17.8.101"
 }
 
-plugin "raw_exec" {
-  config {
-    enabled = true
-  }
-}
-
 plugin "win_iis" {
   config {
     enabled = true

@@ -19,17 +19,14 @@ type taskHandle struct {
 	// stateLock syncs access to all fields below
 	stateLock sync.RWMutex
 
-	logger       hclog.Logger
-	exec         executor.Executor
-	pluginClient *plugin.Client
-	taskConfig   *drivers.TaskConfig
-	procState    drivers.TaskState
-	startedAt    time.Time
-	completedAt  time.Time
-	exitResult   *drivers.ExitResult
-
-	// TODO: add any extra relevant information about the task.
-	pid int
+	logger         hclog.Logger
+	taskConfig     *drivers.TaskConfig
+	procState      drivers.TaskState
+	startedAt      time.Time
+	completedAt    time.Time
+	exitResult     *drivers.ExitResult
+	pidCollector   *pidCollector
+	systemCpuStats *stats.CpuStats
 }
 
 func (h *taskHandle) TaskStatus() *drivers.TaskStatus {
