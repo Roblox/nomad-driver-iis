@@ -11,147 +11,157 @@ import (
 	"strings"
 )
 
-type AppCmdAppPool struct {
+// Application Pool schema given from appcmd.exe
+type appCmdAppPool struct {
 	Name           string     `xml:"APPPOOL.NAME,attr"`
 	PipelineMode   string     `xml:"PipelineMode,attr"`
 	RuntimeVersion string     `xml:"RuntimeVersion,attr"`
 	State          string     `xml:"state,attr"`
-	Add            AppPoolAdd `xml:"add"`
+	Add            appPoolAdd `xml:"add"`
 }
 
-type AppPoolAdd struct {
+// An Application Pool's inner schema to describe the ApplicationPool given from appcmd.exe
+type appPoolAdd struct {
 	Name         string              `xml:"name,attr"`
 	QueueLength  int                 `xml:"queueLength,attr"`
 	AutoStart    bool                `xml:"autoStart,attr"`
-	ProcessModel AppPoolProcessModel `xml:"processModel"`
+	ProcessModel appPoolProcessModel `xml:"processModel"`
 }
 
-type AppPoolProcessModel struct {
+// An Application Pool's ProcessModel schema given from appcmd.exe
+type appPoolProcessModel struct {
 	IdentityType string `xml:"identityType,attr"`
 	Password     string `xml:"password,attr"`
 	Username     string `xml:"userName,attr"`
 }
 
-type AppCmdMessage struct {
+// AppCmd message schema used for errors and messages
+type appCmdMessage struct {
 	Message string `xml:"message,attr"`
 }
 
-type AppCmdResult struct {
-	AppPools        []AppCmdAppPool `xml:"APPPOOL"`
-	Errors          []AppCmdMessage `xml:"ERROR"`
-	Sites           []AppCmdSite    `xml:"SITE"`
-	Statuses        []AppCmdMessage `xml:"STATUS"`
-	WorkerProcesses []AppCmdWP      `xml:"WP"`
+// AppCmd schema for all results
+type appCmdResult struct {
+	AppPools        []appCmdAppPool `xml:"APPPOOL"`
+	Errors          []appCmdMessage `xml:"ERROR"`
+	Sites           []appCmdSite    `xml:"SITE"`
+	Statuses        []appCmdMessage `xml:"STATUS"`
+	WorkerProcesses []appCmdWP      `xml:"WP"`
 	XMLName         xml.Name        `xml:"appcmd"`
 }
 
-type AppCmdSite struct {
+// Site schema given from appcmd.exe
+type appCmdSite struct {
 	Bindings string `xml:"bindings,attr"`
 	ID       int    `xml:"SISTE.ID,attr"`
 	Name     string `xml:"SITE.NAME,attr"`
 	State    string `xml:"state,attr"`
-	Site     Site   `xml:"site"`
+	Site     site   `xml:"site"`
 }
 
-type Site struct {
+// Nested Site schema given from appcmd.exe
+type site struct {
 	Name        string          `xml:"name,attr"`
 	ID          string          `xml:"id,attr"`
-	Application SiteApplication `xml:"application"`
+	Application siteApplication `xml:"application"`
 }
 
-type SiteApplication struct {
+// A Site's Application schema given from appcmd.exe
+type siteApplication struct {
 	Path            string     `xml:"path,attr"`
 	ApplicationPool string     `xml:"applicationPool,attr"`
-	VDirs           []SiteVDir `xml:"virtualDirectory"`
+	VDirs           []siteVDir `xml:"virtualDirectory"`
 }
 
-type SiteVDir struct {
+// A Site's Virtual Directory schema given from appcmd.exe
+type siteVDir struct {
 	Path         string `xml:"path,attr"`
 	PhysicalPath string `xml:"physicalPath,attr"`
 }
 
-type AppCmdWP struct {
+// Worker Process schema given from appcmd.exe
+type appCmdWP struct {
 	AppPoolName string `xml:"APPPOOL.NAME,attr"`
 	Name        string `xml:"WP.NAME,attr"`
 }
 
-type IISAppPoolIdentity struct {
-	Identity string
-	Password string
-	Username string
+// IIS Identity used for an Application Pool
+type iisAppPoolIdentity struct {
+	Identity string `codec:"identity"`
+	Password string `codec:"username"`
+	Username string `codec:"password"`
 }
 
-type IISBinding struct {
-	CertHash     string
-	HostName     string
-	IPAddress    string
+// IIS Binding struct to match
+type iisBinding struct {
+	CertHash     string `codec:"cert_hash"`
+	HostName     string `codec:"hostname"`
+	IPAddress    string `codec:"ipaddress"`
 	Port         int
-	ResourcePort string
-	Type         string
+	ResourcePort string `codec:"port"`
+	Type         string `codec:"type"`
 }
 
-type IISClient struct {
-	AllConfigs bool
+// Website configuration struct
+type iisWebsiteConfig struct {
+	AppPoolConfigPath string             `codec:"apppool_config_path"`
+	AppPoolIdentity   iisAppPoolIdentity `codec:"apppool_identity"`
+	Bindings          []iisBinding       `codec:"bindings"`
+	Path              string             `codec:"path"`
+	SiteConfigPath    string             `codec:"site_config_path"`
 }
 
-type IISWebsiteConfig struct {
-	AppPoolConfigPath string
-	AppPoolIdentity   IISAppPoolIdentity
-	Bindings          []IISBinding
-	Path              string
-	SiteConfigPath    string
-}
-
-// IIS
-
-func (c *IISClient) GetVersion() (string, error) {
-	var iisVersion string
+// Gets the exe version of InetMgr.exe
+func getVersion() (string, error) {
 	cmd := exec.Command("cmd", "/C", `wmic datafile where name='C:\\Windows\\System32\\inetsrv\\InetMgr.exe' get version`)
 	if out, err := cmd.Output(); err != nil {
-		return iisVersion, fmt.Errorf("Failed to determine version: %v", err)
+		return "", fmt.Errorf("Failed to determine version: %v", err)
 	} else {
-		iisVersion = strings.Fields(string(out))[1]
-	}
-	return iisVersion, nil
-}
-
-func (c *IISClient) IsIISRunning() bool {
-	var iisState bool = false
-	cmd := exec.Command(`C:\Windows\System32\sc.exe`, "query", "w3svc")
-	if out, err := cmd.Output(); err != nil {
-		return iisState
-	} else {
-		iisState, _ = regexp.MatchString(`STATE.*:.*4.*RUNNING`, string(out))
-	}
-	return iisState
-}
-
-func (c *IISClient) PurgeIIS() error {
-	sites, err := c.GetSites()
-	if err != nil {
-		return err
-	}
-	appPools, err := c.GetAppPools()
-	if err != nil {
-		return err
-	}
-
-	for _, site := range sites {
-		if err = c.DeleteSite(site.Name); err != nil {
-			return err
+		if output := strings.Fields(string(out)); len(output) != 2 {
+			return "", fmt.Errorf("Did not receive proper version formatting")
+		} else {
+			return output[1], nil
 		}
 	}
-	for _, appPool := range appPools {
-		if err = c.DeleteAppPool(appPool.Name); err != nil {
-			return err
+}
+
+// Returns if the IIS service is running in Windows Service Controller (SC)
+func isIISRunning() (bool, error) {
+	cmd := exec.Command(`C:\Windows\System32\sc.exe`, "query", "w3svc")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return false, err
+	} else {
+		return regexp.MatchString(`STATE.*:.*4.*RUNNING`, string(out))
+	}
+}
+
+// Removes all Application Pools and Sites from IIS
+func purgeIIS() error {
+	if sites, err := getSites(); err != nil {
+		return err
+	} else {
+		for _, site := range sites {
+			if err = deleteSite(site.Name); err != nil {
+				return err
+			}
+		}
+	}
+	if appPools, err := getAppPools(); err != nil {
+		return err
+	} else {
+		for _, appPool := range appPools {
+			if err = deleteAppPool(appPool.Name); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func (c *IISClient) StartIIS() error {
-	if c.IsIISRunning() {
-		return nil
+// Starts the IIS service in Windows SC
+func startIIS() error {
+	if isRunning, err := isIISRunning(); err != nil || isRunning {
+		return err
 	}
 
 	cmd := exec.Command(`C:\Windows\System32\sc.exe`, "start", "w3svc")
@@ -161,9 +171,10 @@ func (c *IISClient) StartIIS() error {
 	return nil
 }
 
-func (c *IISClient) StopIIS() error {
-	if !c.IsIISRunning() {
-		return nil
+// Stops the IIS service in Windows SC
+func stopIIS() error {
+	if isRunning, err := isIISRunning(); err != nil || !isRunning {
+		return err
 	}
 
 	cmd := exec.Command(`C:\Windows\System32\sc.exe`, "stop", "w3svc")
@@ -173,11 +184,44 @@ func (c *IISClient) StopIIS() error {
 	return nil
 }
 
-// APP POOL
+// Executes appcmd.exe with the given arguments and returns a structured result or error
+func executeAppCmd(arg ...string) (appCmdResult, error) {
+	return executeAppCmdWithInput("", arg...)
+}
 
-func (c *IISClient) ApplyAppPoolSettings(appPoolName string, appPoolIdentity IISAppPoolIdentity) error {
-	var result AppCmdResult
-	properties := []string{"set", "config", "/section:applicationPools", "/xml"}
+// Executes appcmd.exe with the given arguments along with an xml path file for input and returns a structured result or error
+func executeAppCmdWithInput(importXmlPath string, arg ...string) (appCmdResult, error) {
+	var result appCmdResult
+	var cmd *exec.Cmd
+
+	arg = append(arg, "/xml")
+	if importXmlPath != "" {
+		arg = append([]string{"/C", `C:\Windows\System32\inetsrv\APPCMD.exe`}, append(arg, fmt.Sprintf("/in<%s", importXmlPath))...)
+		cmd = exec.Command("cmd", arg...)
+	} else {
+		cmd = exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, arg...)
+	}
+
+	if out, err := cmd.Output(); err != nil {
+		// Attempt to parse output for verbose error messages in xml, otherwise return error code
+		// If an appcmd xml is parsed successfully, then accept that as source of error truth
+		if xmlErr := xml.Unmarshal(out, &result); xmlErr == nil {
+			if len(result.Errors) != 0 {
+				return result, fmt.Errorf(result.Errors[0].Message)
+			}
+
+			return result, nil
+		}
+		return result, err
+	} else {
+		xml.Unmarshal(out, &result)
+		return result, nil
+	}
+}
+
+// Applies the Application Pool identity user settings
+func applyAppPoolIdentity(appPoolName string, appPoolIdentity iisAppPoolIdentity) error {
+	properties := []string{"set", "config", "/section:applicationPools"}
 
 	if appPoolIdentity.Identity != "" {
 		properties = append(properties, fmt.Sprintf("/[name='%s'].processModel.identityType:%s", appPoolName, appPoolIdentity.Identity))
@@ -188,167 +232,116 @@ func (c *IISClient) ApplyAppPoolSettings(appPoolName string, appPoolIdentity IIS
 		properties = append(properties, fmt.Sprintf("/[name='%s'].processModel.password:%s", appPoolName, appPoolIdentity.Password))
 	}
 
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, properties...)
-	out, err := cmd.CombinedOutput()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return fmt.Errorf("Failed to set Application Pool settings: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return fmt.Errorf("Failed to set Application Pool settings: %v", string(out))
+	if _, err := executeAppCmd(properties...); err != nil {
+		return fmt.Errorf("Failed to set Application Pool identity: %v", err)
 	}
 
 	return nil
 }
 
-func (c *IISClient) CreateAppPool(appPoolName string, configPath string) error {
-	if c.DoesAppPoolExist(appPoolName) {
-		return nil
+// Creates an Application Pool with the given name and applies an IIS exported Application Pool xml if a path is provided
+func createAppPool(appPoolName string, configPath string) error {
+	if exists, err := doesAppPoolExist(appPoolName); err != nil || exists {
+		return err
 	}
 
-	var result AppCmdResult
-
-	properties := []string{"/C", `C:\Windows\System32\inetsrv\APPCMD.exe`, "add", "apppool", "/xml", fmt.Sprintf("/name:%s", appPoolName)}
-
-	if configPath != "" {
-		properties = append(properties, fmt.Sprintf("/in<%s", configPath))
-	}
-
-	cmd := exec.Command("cmd", properties...)
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return fmt.Errorf("Failed to create Application Pool: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return fmt.Errorf("Failed to create Application Pool: %v", string(out))
+	properties := []string{"add", "apppool", fmt.Sprintf("/name:%s", appPoolName)}
+	if _, err := executeAppCmdWithInput(configPath, properties...); err != nil {
+		return fmt.Errorf("Failed to create Application Pool: %v", err)
 	}
 
 	return nil
 }
 
-func (c *IISClient) DeleteAppPool(appPoolName string) error {
-	if !c.DoesAppPoolExist(appPoolName) {
-		return nil
+// Deletes an Application Pool with the given name
+func deleteAppPool(appPoolName string) error {
+	if exists, err := doesAppPoolExist(appPoolName); err != nil || !exists {
+		return err
 	}
 
-	var result AppCmdResult
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "delete", "apppool", appPoolName, "/xml")
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return fmt.Errorf("Failed to delete Application Pool: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return fmt.Errorf("Failed to delete Application Pool: %v", string(out))
+	if _, err := executeAppCmd("delete", "apppool", appPoolName); err != nil {
+		return fmt.Errorf("Failed to delete Application Pool: %v", err)
 	}
 
 	return nil
 }
 
-func (c *IISClient) DoesAppPoolExist(appPoolName string) bool {
-	if _, err := c.GetAppPool(appPoolName); err != nil {
-		return false
+// Returns if an Application Pool with the given name exists in IIS
+func doesAppPoolExist(appPoolName string) (bool, error) {
+	if appPool, err := getAppPool(appPoolName, false); err != nil || appPool == nil {
+		return false, err
 	}
-
-	return true
+	return true, nil
 }
 
-func (c *IISClient) GetAppPool(appPoolName string) (AppCmdAppPool, error) {
-	var result AppCmdResult
-	var appPool AppCmdAppPool
-
-	config := ""
-	if c.AllConfigs {
-		config = "/config:*"
+// Returns an Application Pool with the given name
+func getAppPool(appPoolName string, allConfigs bool) (*appCmdAppPool, error) {
+	args := []string{"list", "apppool", appPoolName}
+	if allConfigs {
+		args = append(args, "/config:*")
 	}
 
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "list", "apppool", appPoolName, config, "/xml")
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return appPool, fmt.Errorf("Failed to get AppPool: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return appPool, fmt.Errorf("Failed to get AppPool!")
+	if result, err := executeAppCmd(args...); err != nil {
+		return nil, fmt.Errorf("Failed to get Application Pool: %v", err)
 	} else if len(result.AppPools) == 0 {
-		return appPool, fmt.Errorf("Failed to find AppPool")
-	}
-
-	appPool = result.AppPools[0]
-
-	return appPool, nil
-}
-
-func (c *IISClient) GetAppPools() ([]AppCmdAppPool, error) {
-	var result AppCmdResult
-
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "list", "apppool", "/xml")
-	out, _ := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return result.AppPools, fmt.Errorf("Failed to list Application Pools: %v", result.Errors[0].Message)
-	}
-
-	return result.AppPools, nil
-}
-
-func (c *IISClient) IsAppPoolRunning(appPoolName string) bool {
-	if appPool, err := c.GetAppPool(appPoolName); err != nil {
-		return false
+		return nil, nil
 	} else {
-		return strings.ToLower(appPool.State) == "started"
+		return &result.AppPools[0], nil
 	}
 }
 
-func (c *IISClient) StartAppPool(appPoolName string) error {
-	if c.IsAppPoolRunning(appPoolName) {
-		return nil
+// Returns all Application Pools that exist in IIS
+func getAppPools() ([]appCmdAppPool, error) {
+	if result, err := executeAppCmd("list", "apppool"); err != nil {
+		return result.AppPools, fmt.Errorf("Failed to get Application Pools: %v", err)
+	} else {
+		return result.AppPools, nil
+	}
+}
+
+// Returns if an Application Pool with the given name is running in IIS
+func isAppPoolRunning(appPoolName string) (bool, error) {
+	if appPool, err := getAppPool(appPoolName, false); err != nil {
+		return false, err
+	} else {
+		return strings.ToLower(appPool.State) == "started", nil
+	}
+}
+
+// Starts an Application Pool with the given name in IIS
+func startAppPool(appPoolName string) error {
+	if isRunning, err := isAppPoolRunning(appPoolName); err != nil || isRunning {
+		return err
 	}
 
-	var result AppCmdResult
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "start", "apppool", appPoolName, "/xml")
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return fmt.Errorf("Failed to start Application Pool: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return fmt.Errorf("Failed to start Application Pool: %v", string(out))
+	if _, err := executeAppCmd("start", "apppool", appPoolName); err != nil {
+		return fmt.Errorf("Failed to start Application Pool: %v", err)
 	}
 
 	return nil
 }
 
-func (c *IISClient) StopAppPool(appPoolName string) error {
-	if !c.IsAppPoolRunning(appPoolName) {
-		return nil
+// Stops an Application Pool with the given name in IIS
+func stopAppPool(appPoolName string) error {
+	if isRunning, err := isAppPoolRunning(appPoolName); err != nil || !isRunning {
+		return err
 	}
 
-	var result AppCmdResult
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "stop", "apppool", appPoolName, "/xml")
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return fmt.Errorf("Failed to stop Application Pool: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return fmt.Errorf("Failed to stop Application Pool: %v", string(out))
+	if _, err := executeAppCmd("stop", "apppool", appPoolName); err != nil {
+		return fmt.Errorf("Failed to stop Application Pool: %v", err)
 	}
+
 	return nil
 }
 
-// SITE
-
-func (c *IISClient) ApplySiteBindings(siteName string, bindings []IISBinding) error {
-	var result AppCmdResult
-	site, err := c.GetSite(siteName)
+// Applies the Site bindings
+func applySiteBindings(siteName string, bindings []iisBinding) error {
+	site, err := getSite(siteName, false)
 	if err != nil {
 		return err
 	}
 
-	currentBindings, err := site.GetBindings()
+	currentBindings, err := site.getBindings()
 	if err != nil {
 		return err
 	}
@@ -381,6 +374,7 @@ func (c *IISClient) ApplySiteBindings(siteName string, bindings []IISBinding) er
 	}
 	currentBindings = currentBindings[:cIndex]
 
+	// Nothing is changed if there are no bindings to update
 	if len(currentBindings) == 0 && len(bindings) == 0 {
 		return nil
 	}
@@ -388,10 +382,10 @@ func (c *IISClient) ApplySiteBindings(siteName string, bindings []IISBinding) er
 	// Remove any bindings that are not desired
 	for _, binding := range currentBindings {
 		if binding.Type == "https" {
-			bindingInfo, err := c.GetSSLCertBinding(binding.IPAddress, binding.Port)
+			bindingInfo, err := getSSLCertBinding(binding.IPAddress, binding.Port)
 
 			if len(bindingInfo) != 0 {
-				if err = c.UnbindSSLCert(binding.IPAddress, binding.Port); err != nil {
+				if err = unbindSSLCert(binding.IPAddress, binding.Port); err != nil {
 					return err
 				}
 			}
@@ -407,15 +401,15 @@ func (c *IISClient) ApplySiteBindings(siteName string, bindings []IISBinding) er
 				return fmt.Errorf("HTTPS binding used, but no cert hash was supplied!")
 			}
 
-			bindingInfo, err := c.GetSSLCertBinding(binding.IPAddress, binding.Port)
+			bindingInfo, err := getSSLCertBinding(binding.IPAddress, binding.Port)
 
 			if len(bindingInfo) != 0 && bindingInfo["CertificateHash"] != binding.CertHash {
-				if err = c.UnbindSSLCert(binding.IPAddress, binding.Port); err != nil {
+				if err = unbindSSLCert(binding.IPAddress, binding.Port); err != nil {
 					return err
 				}
 			}
 
-			if err = c.BindSSLCert(siteName, binding.IPAddress, binding.Port, binding.CertHash); err != nil {
+			if err = bindSSLCert(siteName, binding.IPAddress, binding.Port, binding.CertHash); err != nil {
 				return err
 			}
 		}
@@ -427,73 +421,52 @@ func (c *IISClient) ApplySiteBindings(siteName string, bindings []IISBinding) er
 		properties = append(properties, fmt.Sprintf("/+bindings.[protocol='%s',bindingInformation='%s:%d:%s']", binding.Type, binding.IPAddress, binding.Port, binding.HostName))
 	}
 
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, properties...)
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return fmt.Errorf("Failed to set Site settings: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return fmt.Errorf("Failed to set Site settings: %v", string(out))
+	if _, err := executeAppCmd(properties...); err != nil {
+		return fmt.Errorf("Failed to set Site bindings: %v", err)
 	}
 
 	return nil
 }
 
-func (c *IISClient) CreateSite(siteName string, sitePath string, configPath string) error {
-	if c.DoesSiteExist(siteName) {
-		return nil
+// Creates a Site with the given name and applies an IIS exported Site xml if a path is provided
+func createSite(siteName string, sitePath string, configPath string) error {
+	if exists, err := doesSiteExist(siteName); err != nil || exists {
+		return err
 	}
 
-	var result AppCmdResult
-	properties := []string{"/C", `C:\Windows\System32\inetsrv\APPCMD.exe`, "add", "site", "/xml", fmt.Sprintf("/name:%s", siteName), fmt.Sprintf("/physicalPath:%s", sitePath)}
-
-	if configPath != "" {
-		properties = append(properties, fmt.Sprintf("/in<%s", configPath))
-	}
-
-	cmd := exec.Command("cmd", properties...)
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return fmt.Errorf("Failed to create Site: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return fmt.Errorf("Failed to create Site: %v", string(out))
+	properties := []string{"add", "site", fmt.Sprintf("/name:%s", siteName), fmt.Sprintf("/physicalPath:%s", sitePath)}
+	if _, err := executeAppCmdWithInput(configPath, properties...); err != nil {
+		return fmt.Errorf("Failed to create Site: %v", err)
 	}
 
 	return nil
 }
 
-func (c *IISClient) DeleteSite(siteName string) error {
-	if !c.DoesSiteExist(siteName) {
-		return nil
+// Deletes a Site with the given name
+func deleteSite(siteName string) error {
+	if exists, err := doesSiteExist(siteName); err != nil || !exists {
+		return err
 	}
 
-	var result AppCmdResult
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "delete", "site", siteName, "/xml")
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return fmt.Errorf("Failed to delete Site: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return fmt.Errorf("Failed to delete Site: %v", string(out))
+	if _, err := executeAppCmd("delete", "site", siteName); err != nil {
+		return fmt.Errorf("Failed to delete Site: %v", err)
 	}
 
 	return nil
 }
 
-func (c *IISClient) DoesSiteExist(siteName string) bool {
-	if _, err := c.GetSite(siteName); err != nil {
-		return false
+// Returns if a Site with the given name exists in IIS
+func doesSiteExist(siteName string) (bool, error) {
+	if site, err := getSite(siteName, false); err != nil || site == nil {
+		return false, err
 	}
 
-	return true
+	return true, nil
 }
 
-func (site *AppCmdSite) GetBindings() ([]IISBinding, error) {
-	var currentBindings []IISBinding
+// Returns IISBindings by parsing a Site's bindings string
+func (site *appCmdSite) getBindings() ([]iisBinding, error) {
+	var currentBindings []iisBinding
 
 	if site.Bindings == "" {
 		return currentBindings, nil
@@ -502,7 +475,7 @@ func (site *AppCmdSite) GetBindings() ([]IISBinding, error) {
 	bindings := strings.Split(site.Bindings, ",")
 
 	for _, binding := range bindings {
-		var iisBinding IISBinding
+		var iisBinding iisBinding
 		slashIndex := strings.Index(binding, "/")
 		iisBinding.Type = binding[:slashIndex]
 		bindingInfo := strings.Split(binding[slashIndex+1:], ":")
@@ -520,273 +493,241 @@ func (site *AppCmdSite) GetBindings() ([]IISBinding, error) {
 	return currentBindings, nil
 }
 
-func (c *IISClient) GetSite(siteName string) (AppCmdSite, error) {
-	var result AppCmdResult
-	var site AppCmdSite
-
-	config := ""
-	if c.AllConfigs {
-		config = "/config:*"
+// Returns a Site with the given name
+func getSite(siteName string, allConfigs bool) (*appCmdSite, error) {
+	args := []string{"list", "site", siteName}
+	if allConfigs {
+		args = append(args, "/config:*")
 	}
 
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "list", "site", siteName, config, "/xml")
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return site, fmt.Errorf("Failed to get Site: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return site, fmt.Errorf("Failed to get Site!")
+	if result, err := executeAppCmd(args...); err != nil {
+		return nil, fmt.Errorf("Failed to get Site: %v", err)
 	} else if len(result.Sites) == 0 {
-		return site, fmt.Errorf("Failed to find Site!")
-	}
-
-	site = result.Sites[0]
-
-	return site, nil
-}
-
-func (c *IISClient) GetSites() ([]AppCmdSite, error) {
-	var result AppCmdResult
-
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "list", "site", "/xml")
-	out, _ := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return result.Sites, fmt.Errorf("Failed to list Sites: %v", result.Errors[0].Message)
-	}
-
-	return result.Sites, nil
-}
-
-func (c *IISClient) IsSiteRunning(siteName string) bool {
-	if site, err := c.GetSite(siteName); err != nil {
-		return false
+		return nil, nil
 	} else {
-		return strings.ToLower(site.State) == "started"
+		return &result.Sites[0], nil
 	}
 }
 
-func (c *IISClient) StartSite(siteName string) error {
-	if c.IsSiteRunning(siteName) {
-		return nil
+// Returns all Sites that exist in IIS
+func getSites() ([]appCmdSite, error) {
+	if result, err := executeAppCmd("list", "site"); err != nil {
+		return nil, fmt.Errorf("Failed to get Sites: %v", err)
+	} else {
+		return result.Sites, nil
+	}
+}
+
+// Returns if a Site with the given name is running in IIS
+func isSiteRunning(siteName string) (bool, error) {
+	if site, err := getSite(siteName, false); err != nil || site == nil {
+		return false, err
+	} else {
+		return strings.ToLower(site.State) == "started", nil
+	}
+}
+
+// Starts a Site with the given name in IIS
+func startSite(siteName string) error {
+	if isRunning, err := isSiteRunning(siteName); err != nil || isRunning {
+		return err
 	}
 
-	var result AppCmdResult
-
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "start", "site", siteName, "/xml")
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return fmt.Errorf("Failed to start Site: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return fmt.Errorf("Failed to start Site: %v", string(out))
+	if _, err := executeAppCmd("start", "site", siteName); err != nil {
+		return fmt.Errorf("Failed to start Site: %v", err)
 	}
 
 	return nil
 }
 
-func (c *IISClient) StopSite(siteName string) error {
-	if !c.IsSiteRunning(siteName) {
-		return nil
+// Stops a Site with the given name in IIS
+func stopSite(siteName string) error {
+	if isRunning, err := isSiteRunning(siteName); err != nil || !isRunning {
+		return err
 	}
 
-	var result AppCmdResult
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "stop", "site", siteName, "/xml")
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return fmt.Errorf("Failed to stop Site: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return fmt.Errorf("Failed to stop Site: %v", string(out))
+	if _, err := executeAppCmd("stop", "site", siteName); err != nil {
+		return fmt.Errorf("Failed to stop Site: %v", err)
 	}
 
 	return nil
 }
 
-// APP
-
-func (c *IISClient) ApplyAppSettings(siteName string) error {
-	var result AppCmdResult
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "set", "app", fmt.Sprintf("%s/", siteName), fmt.Sprintf("/applicationPool:%s", siteName), "/xml")
-	out, err := cmd.Output()
-	xml.Unmarshal(out, &result)
-
-	if len(result.Errors) != 0 {
-		return fmt.Errorf("Failed to set Application settings: %v", result.Errors[0].Message)
-	} else if err != nil {
-		return fmt.Errorf("Failed to set Application settings: %v", string(out))
+// Sets a Site's Application Pool to the names given
+func applySiteAppPool(siteName string, appPoolName string) error {
+	if _, err := executeAppCmd("set", "app", fmt.Sprintf("%s/", siteName), fmt.Sprintf("/applicationPool:%s", appPoolName)); err != nil {
+		return fmt.Errorf("Failed to set Site Application Pool: %v", err)
 	}
 
 	return nil
 }
 
-// WEBSITE
-
-func (c *IISClient) CreateWebsite(webSiteName string, config IISWebsiteConfig) error {
-	if err := c.CreateAppPool(webSiteName, config.AppPoolConfigPath); err != nil {
+// Creates an Application Pool and Site with the given configuration
+func createWebsite(webSiteName string, config iisWebsiteConfig) error {
+	if err := createAppPool(webSiteName, config.AppPoolConfigPath); err != nil {
 		return err
 	}
-	if err := c.ApplyAppPoolSettings(webSiteName, config.AppPoolIdentity); err != nil {
+	if err := applyAppPoolIdentity(webSiteName, config.AppPoolIdentity); err != nil {
 		return err
 	}
-
-	if err := c.CreateSite(webSiteName, config.Path, config.SiteConfigPath); err != nil {
+	if err := createSite(webSiteName, config.Path, config.SiteConfigPath); err != nil {
 		return err
 	}
-	if err := c.ApplyAppSettings(webSiteName); err != nil {
+	if err := applySiteAppPool(webSiteName, webSiteName); err != nil {
 		return err
 	}
-	if err := c.ApplySiteBindings(webSiteName, config.Bindings); err != nil {
+	if err := applySiteBindings(webSiteName, config.Bindings); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (c *IISClient) DeleteWebsite(webSiteName string) error {
-	if err := c.DeleteSite(webSiteName); err != nil {
+// Deletes an Application Pool and Site with the given name
+func deleteWebsite(webSiteName string) error {
+	if err := deleteSite(webSiteName); err != nil {
 		return err
 	}
-	if err := c.DeleteAppPool(webSiteName); err != nil {
+	if err := deleteAppPool(webSiteName); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *IISClient) DoesWebsiteExist(webSiteName string) bool {
-	return c.DoesAppPoolExist(webSiteName) && c.DoesSiteExist(webSiteName)
+// Returns if both Application Pool and Site exist with the given name
+func doesWebsiteExist(webSiteName string) (bool, error) {
+	if exists, err := doesAppPoolExist(webSiteName); err != nil || !exists {
+		return false, err
+	}
+	if exists, err := doesSiteExist(webSiteName); err != nil || !exists {
+		return false, err
+	}
+
+	return true, nil
 }
 
-func (c *IISClient) GetWebsiteProcessIds(webSiteName string) []int {
-	var result AppCmdResult
-	var processIds []int
-
-	cmd := exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, "list", "wp", fmt.Sprintf("/apppool.name:%s", webSiteName), "/xml")
-	out, err := cmd.Output()
-	if err != nil {
-		return processIds
-	}
-	xml.Unmarshal(out, &result)
-
-	for _, wp := range result.WorkerProcesses {
-		newProcessID, err := strconv.Atoi(wp.Name)
-		if err == nil {
-			processIds = append(processIds, newProcessID)
+// Returns the ProcessIds of a running Application Pool
+func getWebsiteProcessIds(webSiteName string) ([]int, error) {
+	if result, err := executeAppCmd("list", "wp", fmt.Sprintf("/apppool.name:%s", webSiteName)); err != nil {
+		return nil, fmt.Errorf("Failed to get Website Process Ids: %v", err)
+	} else {
+		var processIds []int
+		for _, wp := range result.WorkerProcesses {
+			if newProcessID, err := strconv.Atoi(wp.Name); err != nil {
+				return nil, fmt.Errorf("Failed to parse Website Process Ids: %v", err)
+			} else {
+				processIds = append(processIds, newProcessID)
+			}
 		}
+
+		return processIds, nil
+	}
+}
+
+// Returns if both Application Pool and Site are running with the given name
+func isWebsiteRunning(webSiteName string) (bool, error) {
+	if isRunning, err := isAppPoolRunning(webSiteName); err != nil || !isRunning {
+		return false, err
+	}
+	if isRunning, err := isSiteRunning(webSiteName); err != nil || !isRunning {
+		return false, err
 	}
 
-	return processIds
+	return true, nil
 }
 
-func (c *IISClient) IsWebsiteRunning(webSiteName string) bool {
-	return c.IsAppPoolRunning(webSiteName) && c.IsSiteRunning(webSiteName)
-}
-
-func (c *IISClient) StartWebsite(webSiteName string) error {
-	if err := c.StartAppPool(webSiteName); err != nil {
+// Starts both Application Pool and Site with the given name
+func startWebsite(webSiteName string) error {
+	if err := startAppPool(webSiteName); err != nil {
 		return err
 	}
-	if err := c.StartSite(webSiteName); err != nil {
+	if err := startSite(webSiteName); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (c *IISClient) StopWebsite(webSiteName string) error {
-	if err := c.StopSite(webSiteName); err != nil {
+// Stops both Application Pool and Site with the given name
+func stopWebsite(webSiteName string) error {
+	if err := stopSite(webSiteName); err != nil {
 		return err
 	}
-	if err := c.StopAppPool(webSiteName); err != nil {
+	if err := stopAppPool(webSiteName); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// CERTIFICATES
+func getNetshIP(ipAddress string) string {
+	if ipAddress != "" && ipAddress != "*" {
+		return ipAddress
+	} else {
+		return "0.0.0.0"
+	}
+}
 
-func (c *IISClient) BindSSLCert(appID string, ipAddress string, port int, hash string) error {
-	if info, err := c.GetSSLCertBinding(ipAddress, port); err != nil {
+// Binds an appid, ip address, and port to a hash of a pre-existing certificate in the cert store for https protocol IIS binding with netsh
+func bindSSLCert(appID string, ipAddress string, port int, hash string) error {
+	if info, err := getSSLCertBinding(ipAddress, port); err != nil {
 		return err
 	} else if len(info) != 0 && info["CertificateHash"] == hash {
 		return nil
 	}
 
-	netshIPAddress := "0.0.0.0"
-	if ipAddress != "" && ipAddress != "*" {
-		netshIPAddress = ipAddress
-	}
+	cmd := exec.Command(`C:\Windows\System32\netsh.exe`, "http", "add", "sslcert", fmt.Sprintf("ipport=%s:%d", getNetshIP(ipAddress), port), fmt.Sprintf("certhash=%s", hash), fmt.Sprintf("appid={%s}", appID))
 
-	cmd := exec.Command(`C:\Windows\System32\netsh.exe`, "http", "add", "sslcert", fmt.Sprintf("ipport=%s:%d", netshIPAddress, port), fmt.Sprintf("certhash=%s", hash), fmt.Sprintf("appid={%s}", appID))
-
-	_, err := cmd.Output()
-	if err != nil {
-		fmt.Println(cmd)
+	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("Failed to install cert! %+v", err)
 	}
 
 	return nil
 }
 
-func (c *IISClient) GetSSLCertBinding(ipAddress string, port int) (map[string]string, error) {
-	netshIPAddress := "0.0.0.0"
-	if ipAddress != "" && ipAddress != "*" {
-		netshIPAddress = ipAddress
-	}
+// Gets sslcert binding details from an ip address and port with netsh.
+func getSSLCertBinding(ipAddress string, port int) (map[string]string, error) {
 
-	var result map[string]string
-	cmd := exec.Command(`C:\Windows\System32\netsh.exe`, "http", "show", "sslcert", fmt.Sprintf("%s:%d", netshIPAddress, port))
-	out, err := cmd.Output()
+	cmd := exec.Command(`C:\Windows\System32\netsh.exe`, "http", "show", "sslcert", fmt.Sprintf("%s:%d", getNetshIP(ipAddress), port))
 
-	if err != nil {
+	if out, err := cmd.Output(); err != nil {
+		// Only ignore errors for not being able to find the file specified. SSLBinding doesn't exist in that case
 		if !strings.Contains(string(out), "The system cannot find the file specified") {
-			return result, fmt.Errorf("Failed to read imported certificate! %+v", err)
+			return nil, fmt.Errorf("Failed to read imported certificate! %+v", err)
 		}
+		return nil, nil
+	} else {
+		result := make(map[string]string)
+		count := 0
+		scanner := bufio.NewScanner(bytes.NewReader(out))
+		for scanner.Scan() {
+			count++
+			if count < 3 {
+				continue
+			}
+			line := scanner.Text()
+			if strings.Contains(line, ":") {
+				split := strings.Split(line, ":")
+
+				space := regexp.MustCompile(`\s+`)
+				key := space.ReplaceAllString(split[0], "")
+				result[key] = strings.TrimSpace(split[1])
+			}
+		}
+
+		return result, nil
 	}
-
-	result = make(map[string]string)
-	count := 0
-	scanner := bufio.NewScanner(bytes.NewReader(out))
-	for scanner.Scan() {
-		count++
-		if count < 3 {
-			continue
-		}
-		line := scanner.Text()
-		if strings.Contains(line, ":") {
-			split := strings.Split(line, ":")
-
-			space := regexp.MustCompile(`\s+`)
-			key := space.ReplaceAllString(split[0], "")
-			result[key] = strings.TrimSpace(split[1])
-		}
-
-	}
-
-	return result, nil
 }
 
-func (c *IISClient) UnbindSSLCert(ipAddress string, port int) error {
-	if info, err := c.GetSSLCertBinding(ipAddress, port); err != nil {
+// Removes ip address and port sslcert binding with netsh
+func unbindSSLCert(ipAddress string, port int) error {
+	if info, err := getSSLCertBinding(ipAddress, port); err != nil || len(info) == 0 {
 		return err
-	} else if len(info) == 0 {
-		return nil
 	}
 
-	netshIPAddress := "0.0.0.0"
-	if ipAddress != "" && ipAddress != "*" {
-		netshIPAddress = ipAddress
-	}
+	cmd := exec.Command(`C:\Windows\System32\netsh.exe`, "http", "delete", "sslcert", fmt.Sprintf("ipport=%s:%d", getNetshIP(ipAddress), port))
 
-	cmd := exec.Command(`C:\Windows\System32\netsh.exe`, "http", "delete", "sslcert", fmt.Sprintf("ipport=%s:%d", netshIPAddress, port))
-
-	_, err := cmd.Output()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("Failed to uninstall cert! %+v", err)
 	}
 
