@@ -165,9 +165,8 @@ func doBindingsMatchSite(t *testing.T, expected []iisBinding, siteName string) b
 		return false
 	}
 
-	exists := false
 	for _, expectedBinding := range expected {
-		exists = false
+		exists := false
 		if expectedBinding.IPAddress == "" {
 			expectedBinding.IPAddress = "*"
 		}
