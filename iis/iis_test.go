@@ -1,9 +1,10 @@
 package iis
 
-// This is an integration test file for iis.go and IIS on a Windows Server
+// This is a test file for iis.go and IIS on a Windows Server
+// All tests are using to execute the iis function which directly communicate with various executables of Windows (sc, netsh, and appcmd)
+// These tests ensure the functionality of the code being used by the nomad handle/driver will properly change iis as needed
 
 import (
-	"fmt"
 	"regexp"
 	"testing"
 	"time"
@@ -11,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var (
+const (
 	guid = "d42d7b18-691b-409a-94fd-4259a2b7e066"
 	hash = "854d57551e79656159a0081054fbc08c6c648f86"
 )
@@ -23,8 +24,9 @@ func TestIISVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	match, _ := regexp.MatchString(`^[0-9]*\.[0-9]*\.[0-9]*\.[[0-9]*$`, version)
-	if !match {
+	if match, err := regexp.MatchString(`^[0-9]*\.[0-9]*\.[0-9]*\.[[0-9]*$`, version); err != nil {
+		t.Fatal(err)
+	} else if !match {
 		t.Fatal("Version returned does not match regex")
 	}
 }
@@ -145,30 +147,42 @@ func TestSSLBinding(t *testing.T) {
 }
 
 // Helper function for verify iis bindings match
-func doBindingsMatch(expected []iisBinding, actual []iisBinding) bool {
+func doBindingsMatchSite(t *testing.T, expected []iisBinding, siteName string) bool {
+	site, err := getSite(guid, true)
+	if err != nil {
+		t.Fatal(err)
+	} else if site == nil {
+		t.Fatal("Site not found!")
+	}
+
+	actual, err := site.getBindings()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	if len(expected) != len(actual) {
-		fmt.Println(fmt.Sprintf("Expected %d bindings, but got %d", len(expected), len(actual)))
+		t.Logf("Expected %d bindings, but got %d", len(expected), len(actual))
 		return false
-	} else {
-		exists := false
-		for _, expectedBinding := range expected {
-			exists = false
-			if expectedBinding.IPAddress == "" {
-				expectedBinding.IPAddress = "*"
+	}
+
+	exists := false
+	for _, expectedBinding := range expected {
+		exists = false
+		if expectedBinding.IPAddress == "" {
+			expectedBinding.IPAddress = "*"
+		}
+		for _, actualBinding := range actual {
+			if expectedBinding.Type == actualBinding.Type &&
+				expectedBinding.IPAddress == actualBinding.IPAddress &&
+				expectedBinding.HostName == actualBinding.HostName &&
+				expectedBinding.Port == actualBinding.Port {
+				exists = true
+				break
 			}
-			for _, actualBinding := range actual {
-				if expectedBinding.Type == actualBinding.Type &&
-					expectedBinding.IPAddress == actualBinding.IPAddress &&
-					expectedBinding.HostName == actualBinding.HostName &&
-					expectedBinding.Port == actualBinding.Port {
-					exists = true
-					break
-				}
-			}
-			if !exists {
-				fmt.Println("Doesn't Exist: ", expectedBinding)
-				return false
-			}
+		}
+		if !exists {
+			t.Logf("Doesn't Exist: %v", expectedBinding)
+			return false
 		}
 	}
 
@@ -199,16 +213,8 @@ func TestSiteBinding(t *testing.T) {
 	}
 
 	// Verify that expected and actual bindings match
-	if site, err := getSite(guid, true); err != nil {
-		t.Fatal(err)
-	} else if site == nil {
-		t.Fatal("Site not found!")
-	} else {
-		if actualBindings, err := site.getBindings(); err != nil {
-			t.Fatal(err)
-		} else if !doBindingsMatch(bindings, actualBindings) {
-			t.Fatal("Expected and Actual bindings do not match!")
-		}
+	if !doBindingsMatchSite(t, bindings, guid) {
+		t.Fatal("Expected and Actual bindings do not match!")
 	}
 
 	// Change up bindings so that 1 is overwritten and add a new one with specific ip and hostname
@@ -224,16 +230,8 @@ func TestSiteBinding(t *testing.T) {
 	}
 
 	// Verify that the new binding match actual and expected
-	if site, err := getSite(guid, true); err != nil {
-		t.Fatal(err)
-	} else if site == nil {
-		t.Fatal("Site not found!")
-	} else {
-		if actualBindings, err := site.getBindings(); err != nil {
-			t.Fatal(err)
-		} else if !doBindingsMatch(bindings, actualBindings) {
-			t.Fatal("Expected and Actual bindings do not match!")
-		}
+	if !doBindingsMatchSite(t, bindings, guid) {
+		t.Fatal("Expected and Actual bindings do not match!")
 	}
 
 	// Test a scenario where bindings are not supplied (which should result in no bindings applied to site)
@@ -245,16 +243,8 @@ func TestSiteBinding(t *testing.T) {
 	}
 
 	// Verify that bindings match
-	if site, err := getSite(guid, true); err != nil {
-		t.Fatal(err)
-	} else if site == nil {
-		t.Fatal("Site not found!")
-	} else {
-		if actualBindings, err := site.getBindings(); err != nil {
-			t.Fatal(err)
-		} else if !doBindingsMatch(bindings, actualBindings) {
-			t.Fatal("Expected and Actual bindings do not match!")
-		}
+	if !doBindingsMatchSite(t, bindings, guid) {
+		t.Fatal("Expected and Actual bindings do not match!")
 	}
 
 	// Cleanup site
