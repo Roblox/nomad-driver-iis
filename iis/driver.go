@@ -187,13 +187,6 @@ func (d *Driver) SetConfig(cfg *base.Config) error {
 	// (some dependency between attributes) or special data parsing (the
 	// string "10s" into a time.Interval) you can do it here and update the
 	// value in d.config.
-	//
-	// In the example below we check if the shell specified by the user is
-	// supported by the plugin.
-	shell := d.config.Shell
-	if shell != "bash" && shell != "fish" {
-		return fmt.Errorf("invalid shell %s", d.config.Shell)
-	}
 
 	// Save the Nomad agent configuration
 	if cfg.AgentConfig != nil {
