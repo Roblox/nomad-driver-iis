@@ -184,29 +184,10 @@ func (d *Driver) SetConfig(cfg *base.Config) error {
 	// Save the configuration to the plugin
 	d.config = &config
 
-	// TODO: parse and validated any configuration value if necessary.
-	//
-	// If your driver agent configuration requires any complex validation
-	// (some dependency between attributes) or special data parsing (the
-	// string "10s" into a time.Interval) you can do it here and update the
-	// value in d.config.
-	//
-	// In the example below we check if the shell specified by the user is
-	// supported by the plugin.
-	shell := d.config.Shell
-	if shell != "bash" && shell != "fish" {
-		return fmt.Errorf("invalid shell %s", d.config.Shell)
-	}
-
 	// Save the Nomad agent configuration
 	if cfg.AgentConfig != nil {
 		d.nomadConfig = cfg.AgentConfig.Driver
 	}
-
-	// TODO: initialize any extra requirements if necessary.
-	//
-	// Here you can use the config values to initialize any resources that are
-	// shared by all tasks that use this driver, such as a daemon process.
 
 	return nil
 }
