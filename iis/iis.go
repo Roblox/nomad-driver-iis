@@ -97,8 +97,8 @@ type iisBinding struct {
 	CertHash     string `codec:"cert_hash"`
 	HostName     string `codec:"hostname"`
 	IPAddress    string `codec:"ipaddress"`
-	Port         int
-	ResourcePort string `codec:"port"`
+	Port         int    `codec:"port"`
+	ResourcePort string `codec:"resource_port"`
 	Type         string `codec:"type"`
 }
 

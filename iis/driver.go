@@ -72,11 +72,12 @@ var (
 			"password": hclspec.NewAttr("password", "string", false),
 		})),
 		"bindings": hclspec.NewBlockList("bindings", hclspec.NewObject(map[string]*hclspec.Spec{
-			"hostname":  hclspec.NewAttr("hostname", "string", false),
-			"ipaddress": hclspec.NewAttr("ipaddress", "string", false),
-			"port":      hclspec.NewAttr("port", "string", false),
-			"type":      hclspec.NewAttr("type", "string", false),
-			"cert_hash": hclspec.NewAttr("cert_hash", "string", false),
+			"hostname":      hclspec.NewAttr("hostname", "string", false),
+			"ipaddress":     hclspec.NewAttr("ipaddress", "string", false),
+			"resource_port": hclspec.NewAttr("resource_port", "string", false),
+			"port":          hclspec.NewAttr("port", "integer", false),
+			"type":          hclspec.NewAttr("type", "string", false),
+			"cert_hash":     hclspec.NewAttr("cert_hash", "string", false),
 		})),
 	})
 
@@ -282,7 +283,6 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		procState:      drivers.TaskStateRunning,
 		startedAt:      time.Now().Round(time.Millisecond),
 		logger:         d.logger,
-		pidCollector:   newPidCollector(d.logger),
 		systemCpuStats: stats.NewCpuStats(),
 	}
 
@@ -297,7 +297,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	}
 
 	d.tasks.Set(cfg.ID, h)
-	go h.run()
+	go h.run(&driverConfig)
 	return handle, nil, nil
 }
 
@@ -328,7 +328,6 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		startedAt:      taskState.StartedAt,
 		exitResult:     &drivers.ExitResult{},
 		logger:         d.logger,
-		pidCollector:   newPidCollector(d.logger),
 		systemCpuStats: stats.NewCpuStats(),
 	}
 

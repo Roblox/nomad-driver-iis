@@ -1,14 +1,12 @@
 package iis
 
 import (
-	"context"
-	"strconv"
+	"errors"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/go-plugin"
-	"github.com/hashicorp/nomad/drivers/shared/executor"
 	"github.com/hashicorp/nomad/plugins/drivers"
 )
 
@@ -59,26 +57,73 @@ func (h *taskHandle) IsRunning() bool {
 	return h.procState == drivers.TaskStateRunning
 }
 
-func (h *taskHandle) run() {
-	h.stateLock.Lock()
-	if h.exitResult == nil {
-		h.exitResult = &drivers.ExitResult{}
+func (h *taskHandle) run(driverConfig *TaskConfig) {
+	if !filepath.IsAbs(driverConfig.Path) {
+		driverConfig.Path = filepath.Join(h.taskConfig.TaskDir().Dir, driverConfig.Path)
 	}
-	h.stateLock.Unlock()
 
-	// TODO: wait for your task to complete and upate its state.
-	ps, err := h.exec.Wait(context.Background())
-	h.stateLock.Lock()
-	defer h.stateLock.Unlock()
-
-	if err != nil {
-		h.exitResult.Err = err
-		h.procState = drivers.TaskStateUnknown
-		h.completedAt = time.Now()
+	// Gather Network Ports: http or https only
+	networks := h.taskConfig.Resources.NomadResources.Networks
+	if len(networks) == 0 {
+		errMsg := "Error in launching task: Trying to map ports but no network interface is available"
+		h.handleError(errMsg, errors.New(errMsg))
 		return
 	}
-	h.procState = drivers.TaskStateExited
-	h.exitResult.ExitCode = ps.ExitCode
-	h.exitResult.Signal = ps.Signal
-	h.completedAt = ps.Time
+
+	var iisBindings []IISBinding
+	for _, binding := range driverConfig.Bindings {
+		if binding.Port == 0 && binding.ResourcePort == "" {
+			errMsg := "Error in launching task: both binding.Port and binding.ResourcePort cannot be unset."
+			h.handleError(errMsg, errors.New(errMsg))
+			return
+		}
+
+		if binding.Port < 0 {
+			errMsg := "Error in launching task: binding.Port cannot be negative."
+			h.handleError(errMsg, errors.New(errMsg))
+			return
+		}
+
+		if binding.Port > 0 {
+			iisBindings = append(iisBindings, binding)
+			continue
+		}
+
+		for _, network := range networks {
+			for _, dynamicPort := range network.DynamicPorts {
+				if binding.ResourcePort == dynamicPort.Label {
+					binding.Port = dynamicPort.Value
+					iisBindings = append(iisBindings, binding)
+				}
+			}
+			for _, staticPort := range network.ReservedPorts {
+				if binding.ResourcePort == staticPort.Label {
+					binding.Port = staticPort.Value
+					iisBindings = append(iisBindings, binding)
+				}
+			}
+		}
+	}
+
+	driverConfig.Bindings = iisBindings
+
+	if err := createWebsite(h.taskConfig.AllocID, driverConfig); err != nil {
+		errMsg := fmt.Sprintf("Error in creating website: %v", err)
+		h.handleError(errMsg, err)
+		return
+	}
+
+	if err := startWebsite(h.taskConfig.AllocID); err != nil {
+		errMsg := fmt.Sprintf("Error in starting website: %v", err)
+		h.handleError(errMsg, err)
+		return
+	}
+}
+
+// handleError will log the error message (errMsg) and update the task handle with exit results.
+func (h *taskHandle) handleError(errMsg string, err error) {
+	h.logger.Error(errMsg)
+	h.exitResult.Err = err
+	h.procState = drivers.TaskStateUnknown
+	h.completedAt = time.Now()
 }
