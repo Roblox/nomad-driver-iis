@@ -251,20 +251,20 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 
 	// Check if IIS is running in SC
 	if isRunning, err := isIISRunning(); err != nil {
-		d.logger.Error("Failed to get IIS running status: %v", err)
-		fp.Health = drivers.HealthStateUnhealthy
-		fp.HealthDescription = "Error"
+		d.logger.Error("Error in building fingerprint, when trying to get IIS running status: %v", err)
+		fp.Health = drivers.HealthStateUndetected
+		fp.HealthDescription = "Undetected"
 		return fp
 	} else if !isRunning {
 		fp.Health = drivers.HealthStateUnhealthy
-		fp.HealthDescription = "Stopped"
+		fp.HealthDescription = "Unhealthy"
 		return fp
 	}
 
-	// Get and set version attribute
+	// Get IIS version
 	version, err := getVersion()
 	if err != nil {
-		d.logger.Warn("Failed to find IIS version: %v", err)
+		d.logger.Warn("Error in building fingerprint: failed to find IIS version: %v", err)
 		return fp
 	}
 
