@@ -104,6 +104,7 @@ type iisBinding struct {
 	Type         string `codec:"type"`
 }
 
+// Stat fields that are unmarshalled from WMI
 type wmiProcessStats struct {
 	KernelModeTime    uint64
 	UserModeTime      uint64
