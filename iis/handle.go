@@ -1,6 +1,7 @@
 package iis
 
 import (
+	"errors"
 	"path/filepath"
 	"sync"
 	"time"
@@ -64,7 +65,11 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 	// Gather Network Ports: http or https only
 	networks := h.taskConfig.Resources.NomadResources.Networks
 	if len(networks) == 0 {
-		h.logger.Error("Error in launching the task: Trying to map ports but no network interface is available")
+		errMsg := "Error in launching the task: Trying to map ports but no network interface is available"
+		h.logger.Error(errMsg)
+		h.exitResult.Err = errors.New(errMsg)
+		h.procState = drivers.TaskStateUnknown
+		h.completedAt = time.Now()
 		return
 	}
 
@@ -90,11 +95,17 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 
 	if err := createWebsite(h.taskConfig.AllocID, driverConfig); err != nil {
 		h.logger.Error("Error in creating website: %v", err)
+		h.exitResult.Err = err
+		h.procState = drivers.TaskStateUnknown
+		h.completedAt = time.Now()
 		return
 	}
 
 	if err := startWebsite(h.taskConfig.AllocID); err != nil {
 		h.logger.Error("Error in starting website: %v", err)
+		h.exitResult.Err = err
+		h.procState = drivers.TaskStateUnknown
+		h.completedAt = time.Now()
 		return
 	}
 }
