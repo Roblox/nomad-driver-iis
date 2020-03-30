@@ -65,16 +65,30 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 	// Gather Network Ports: http or https only
 	networks := h.taskConfig.Resources.NomadResources.Networks
 	if len(networks) == 0 {
-		errMsg := "Error in launching the task: Trying to map ports but no network interface is available"
-		h.logger.Error(errMsg)
-		h.exitResult.Err = errors.New(errMsg)
-		h.procState = drivers.TaskStateUnknown
-		h.completedAt = time.Now()
+		errMsg := "Error in launching task: Trying to map ports but no network interface is available"
+		h.handleError(errMsg, errors.New(errMsg))
 		return
 	}
 
 	var iisBindings []IISBinding
 	for _, binding := range driverConfig.Bindings {
+		if binding.Port == 0 && binding.ResourcePort == "" {
+			errMsg := "Error in launching task: both binding.Port and binding.ResourcePort cannot be unset."
+			h.handleError(errMsg, errors.New(errMsg))
+			return
+		}
+
+		if binding.Port < 0 {
+			errMsg := "Error in launching task: binding.Port cannot be negative."
+			h.handleError(errMsg, errors.New(errMsg))
+			return
+		}
+
+		if binding.Port > 0 {
+			iisBindings = append(iisBindings, binding)
+			continue
+		}
+
 		for _, network := range networks {
 			for _, dynamicPort := range network.DynamicPorts {
 				if binding.ResourcePort == dynamicPort.Label {
@@ -94,18 +108,22 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 	driverConfig.Bindings = iisBindings
 
 	if err := createWebsite(h.taskConfig.AllocID, driverConfig); err != nil {
-		h.logger.Error("Error in creating website: %v", err)
-		h.exitResult.Err = err
-		h.procState = drivers.TaskStateUnknown
-		h.completedAt = time.Now()
+		errMsg := fmt.Sprintf("Error in creating website: %v", err)
+		h.handleError(errMsg, err)
 		return
 	}
 
 	if err := startWebsite(h.taskConfig.AllocID); err != nil {
-		h.logger.Error("Error in starting website: %v", err)
-		h.exitResult.Err = err
-		h.procState = drivers.TaskStateUnknown
-		h.completedAt = time.Now()
+		errMsg := fmt.Sprintf("Error in starting website: %v", err)
+		h.handleError(errMsg, err)
 		return
 	}
+}
+
+// handleError will log the error message (errMsg) and update the task handle with exit results.
+func (h *taskHandle) handleError(errMsg string, err error) {
+	h.logger.Error(errMsg)
+	h.exitResult.Err = err
+	h.procState = drivers.TaskStateUnknown
+	h.completedAt = time.Now()
 }

@@ -72,11 +72,12 @@ var (
 			"password": hclspec.NewAttr("password", "string", false),
 		})),
 		"bindings": hclspec.NewBlockList("bindings", hclspec.NewObject(map[string]*hclspec.Spec{
-			"hostname":  hclspec.NewAttr("hostname", "string", false),
-			"ipaddress": hclspec.NewAttr("ipaddress", "string", false),
-			"port":      hclspec.NewAttr("port", "string", false),
-			"type":      hclspec.NewAttr("type", "string", false),
-			"cert_hash": hclspec.NewAttr("cert_hash", "string", false),
+			"hostname":     hclspec.NewAttr("hostname", "string", false),
+			"ipaddress":    hclspec.NewAttr("ipaddress", "string", false),
+			"resourceport": hclspec.NewAttr("resourceport", "string", false),
+			"port":         hclspec.NewAttr("port", "integer", false),
+			"type":         hclspec.NewAttr("type", "string", false),
+			"cert_hash":    hclspec.NewAttr("cert_hash", "string", false),
 		})),
 	})
 
