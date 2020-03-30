@@ -4,16 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
 	"time"
 
 	"github.com/hashicorp/consul-template/signals"
 	"github.com/hashicorp/go-hclog"
 	log "github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/nomad/client/stats"
 	"github.com/hashicorp/nomad/drivers/shared/eventer"
-	"github.com/hashicorp/nomad/drivers/shared/executor"
 	"github.com/hashicorp/nomad/plugins/base"
 	"github.com/hashicorp/nomad/plugins/drivers"
 	"github.com/hashicorp/nomad/plugins/shared/hclspec"
@@ -232,6 +229,7 @@ func (d *Driver) handleFingerprint(ctx context.Context, ch chan<- *drivers.Finge
 }
 
 // buildFingerprint returns the driver's fingerprint data
+// Gets IIS version and checks running state in SC
 func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 	fp := &drivers.Fingerprint{
 		Attributes:        map[string]*structs.Attribute{},
@@ -239,43 +237,26 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 		HealthDescription: drivers.DriverHealthy,
 	}
 
-	// TODO: implement fingerprinting logic to populate health and driver
-	// attributes.
-	//
-	// Fingerprinting is used by the plugin to relay two important information
-	// to Nomad: health state and node attributes.
-	//
-	// If the plugin reports to be unhealthy, or doesn't send any fingerprint
-	// data in the expected interval of time, Nomad will restart it.
-	//
-	// Node attributes can be used to report any relevant information about
-	// the node in which the plugin is running (specific library availability,
-	// installed versions of a software etc.). These attributes can then be
-	// used by an operator to set job constrains.
-	//
-	// In the example below we check if the shell specified by the user exists
-	// in the node.
-	shell := d.config.Shell
-
-	cmd := exec.Command("which", shell)
-	if err := cmd.Run(); err != nil {
-		return &drivers.Fingerprint{
-			Health:            drivers.HealthStateUndetected,
-			HealthDescription: fmt.Sprintf("shell %s not found", shell),
-		}
+	// Check if IIS is running in SC
+	if isRunning, err := isIISRunning(); err != nil {
+		d.logger.Error("Error in building fingerprint, when trying to get IIS running status: %v", err)
+		fp.Health = drivers.HealthStateUndetected
+		fp.HealthDescription = "Undetected"
+		return fp
+	} else if !isRunning {
+		fp.Health = drivers.HealthStateUnhealthy
+		fp.HealthDescription = "Unhealthy"
+		return fp
 	}
 
-	// We also set the shell and its version as attributes
-	cmd = exec.Command(shell, "--version")
-	if out, err := cmd.Output(); err != nil {
-		d.logger.Warn("failed to find shell version: %v", err)
-	} else {
-		re := regexp.MustCompile("[0-9]\\.[0-9]\\.[0-9]")
-		version := re.FindString(string(out))
-
-		fp.Attributes["driver.nomad-driver-iis.shell_version"] = structs.NewStringAttribute(version)
-		fp.Attributes["driver.nomad-driver-iis.shell"] = structs.NewStringAttribute(shell)
+	// Get IIS version
+	version, err := getVersion()
+	if err != nil {
+		d.logger.Warn("Error in building fingerprint: failed to find IIS version: %v", err)
+		return fp
 	}
+
+	fp.Attributes["driver.win_iis.iis_version"] = structs.NewStringAttribute(version)
 
 	return fp
 }
