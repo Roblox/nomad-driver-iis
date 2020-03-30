@@ -98,7 +98,7 @@ type iisBinding struct {
 	HostName     string `codec:"hostname"`
 	IPAddress    string `codec:"ipaddress"`
 	Port         int    `codec:"port"`
-	ResourcePort string `codec:"resourceport"`
+	ResourcePort string `codec:"resource_port"`
 	Type         string `codec:"type"`
 }
 
