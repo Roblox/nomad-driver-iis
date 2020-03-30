@@ -33,6 +33,16 @@ func (h *taskHandle) TaskStatus() *drivers.TaskStatus {
 	h.stateLock.RLock()
 	defer h.stateLock.RUnlock()
 
+	isRunning, err := isWebsiteRunning(h.TaskConfig.AllocID)
+	if err != nil {
+		h.logger.Error("Error in getting task status: %v", err)
+		h.procState = drivers.TaskStateExited
+	}
+
+	if !isRunning {
+		h.procState = drivers.TaskStateExited
+	}
+
 	return &drivers.TaskStatus{
 		ID:          h.taskConfig.ID,
 		Name:        h.taskConfig.Name,
@@ -40,9 +50,6 @@ func (h *taskHandle) TaskStatus() *drivers.TaskStatus {
 		StartedAt:   h.startedAt,
 		CompletedAt: h.completedAt,
 		ExitResult:  h.exitResult,
-		DriverAttributes: map[string]string{
-			"pid": strconv.Itoa(h.pid),
-		},
 	}
 }
 
