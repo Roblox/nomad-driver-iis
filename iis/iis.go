@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	wmi "github.com/StackExchange/wmi"
 )
 
 // Application Pool schema given from appcmd.exe
@@ -100,6 +102,12 @@ type iisBinding struct {
 	Port         int
 	ResourcePort string `codec:"port"`
 	Type         string `codec:"type"`
+}
+
+type wmiProcessStats struct {
+	KernelModeTime    uint64
+	UserModeTime      uint64
+	WorkingSetPrivate uint64
 }
 
 // Gets the exe version of InetMgr.exe
@@ -613,6 +621,57 @@ func getWebsiteProcessIds(webSiteName string) ([]int, error) {
 
 		return processIds, nil
 	}
+}
+
+// Gets the WMI CPU and Memory stats of a given website
+func getWebsiteStats(webSiteName string) (*wmiProcessStats, error) {
+	var processIds []string
+
+	// Get a list of process ids tied the app pool
+	result, err := executeAppCmd("list", "wp", fmt.Sprintf("/apppool.name:%s", webSiteName))
+	if err != nil {
+		return nil, err
+	}
+
+	// Get a slice of process id strings for WQL queries
+	for _, wp := range result.WorkerProcesses {
+		processIds = append(processIds, wp.Name)
+	}
+
+	// No process ids means no stats.
+	// IIS sites/app pools can be in a state without an actively running process id.
+	if len(processIds) == 0 {
+		return nil, fmt.Errorf("No process ids were found!")
+	}
+
+	// Query WMI for cpu stats with the given process ids
+	var wmiProcesses []wmiProcessStats
+	if err := wmi.Query(fmt.Sprintf("SELECT KernelModeTime,UserModeTime FROM Win32_Process WHERE ProcessID=%s", strings.Join(processIds, "OR ProcessID=")), &wmiProcesses); err != nil {
+		return nil, err
+	}
+
+	// Sum up all cpu stats
+	var stats wmiProcessStats
+	for _, process := range wmiProcesses {
+		stats.KernelModeTime += process.KernelModeTime
+		stats.UserModeTime += process.UserModeTime
+	}
+
+	// Query WMI for memory stats with the given process ids
+	// We are only using the WorkingSetPrivate for our memory to better align the Windows Task Manager and the RSS field nomad is expecting
+	if err := wmi.Query(fmt.Sprintf("SELECT WorkingSetPrivate FROM Win32_PerfFormattedData_PerfProc_Process WHERE IDProcess=%s", strings.Join(processIds, "OR IDProcess=")), &wmiProcesses); err != nil {
+		return nil, err
+	}
+
+	// Sum up all memory stats
+	for _, process := range wmiProcesses {
+		stats.WorkingSetPrivate += process.WorkingSetPrivate
+	}
+
+	// Need to multiply cpu stats by one hundred to align with nomad method CpuStats.Percent's expected decimal placement
+	stats.KernelModeTime *= 100
+	stats.UserModeTime *= 100
+	return &stats, nil
 }
 
 // Returns if both Application Pool and Site are running with the given name
