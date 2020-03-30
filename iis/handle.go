@@ -1,14 +1,11 @@
 package iis
 
 import (
-	"context"
-	"strconv"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/go-plugin"
-	"github.com/hashicorp/nomad/drivers/shared/executor"
 	"github.com/hashicorp/nomad/plugins/drivers"
 )
 
@@ -59,26 +56,45 @@ func (h *taskHandle) IsRunning() bool {
 	return h.procState == drivers.TaskStateRunning
 }
 
-func (h *taskHandle) run() {
-	h.stateLock.Lock()
-	if h.exitResult == nil {
-		h.exitResult = &drivers.ExitResult{}
+func (h *taskHandle) run(driverConfig *TaskConfig) {
+	if !filepath.IsAbs(driverConfig.Path) {
+		driverConfig.Path = filepath.Join(h.taskConfig.TaskDir().Dir, driverConfig.Path)
 	}
-	h.stateLock.Unlock()
 
-	// TODO: wait for your task to complete and upate its state.
-	ps, err := h.exec.Wait(context.Background())
-	h.stateLock.Lock()
-	defer h.stateLock.Unlock()
-
-	if err != nil {
-		h.exitResult.Err = err
-		h.procState = drivers.TaskStateUnknown
-		h.completedAt = time.Now()
+	// Gather Network Ports: http or https only
+	networks := h.taskConfig.Resources.NomadResources.Networks
+	if len(networks) == 0 {
+		h.logger.Error("Error in launching the task: Trying to map ports but no network interface is available")
 		return
 	}
-	h.procState = drivers.TaskStateExited
-	h.exitResult.ExitCode = ps.ExitCode
-	h.exitResult.Signal = ps.Signal
-	h.completedAt = ps.Time
+
+	var iisBindings []IISBinding
+	for _, binding := range driverConfig.Bindings {
+		for _, network := range networks {
+			for _, dynamicPort := range network.DynamicPorts {
+				if binding.ResourcePort == dynamicPort.Label {
+					binding.Port = dynamicPort.Value
+					iisBindings = append(iisBindings, binding)
+				}
+			}
+			for _, staticPort := range network.ReservedPorts {
+				if binding.ResourcePort == staticPort.Label {
+					binding.Port = staticPort.Value
+					iisBindings = append(iisBindings, binding)
+				}
+			}
+		}
+	}
+
+	driverConfig.Bindings = iisBindings
+
+	if err := createWebsite(h.taskConfig.AllocID, driverConfig); err != nil {
+		h.logger.Error("Error in creating website: %v", err)
+		return
+	}
+
+	if err := startWebsite(h.taskConfig.AllocID); err != nil {
+		h.logger.Error("Error in starting website: %v", err)
+		return
+	}
 }

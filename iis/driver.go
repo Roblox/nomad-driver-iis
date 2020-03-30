@@ -282,7 +282,6 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		procState:      drivers.TaskStateRunning,
 		startedAt:      time.Now().Round(time.Millisecond),
 		logger:         d.logger,
-		pidCollector:   newPidCollector(d.logger),
 		systemCpuStats: stats.NewCpuStats(),
 	}
 
@@ -297,7 +296,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	}
 
 	d.tasks.Set(cfg.ID, h)
-	go h.run()
+	go h.run(&driverConfig)
 	return handle, nil, nil
 }
 
@@ -328,7 +327,6 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		startedAt:      taskState.StartedAt,
 		exitResult:     &drivers.ExitResult{},
 		logger:         d.logger,
-		pidCollector:   newPidCollector(d.logger),
 		systemCpuStats: stats.NewCpuStats(),
 	}
 
