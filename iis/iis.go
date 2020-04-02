@@ -563,20 +563,20 @@ func applySiteAppPool(siteName string, appPoolName string) error {
 }
 
 // Creates an Application Pool and Site with the given configuration
-func createWebsite(webSiteName string, config *TaskConfig) error {
-	if err := createAppPool(webSiteName, config.AppPoolConfigPath); err != nil {
+func createWebsite(websiteName string, config *TaskConfig) error {
+	if err := createAppPool(websiteName, config.AppPoolConfigPath); err != nil {
 		return err
 	}
-	if err := applyAppPoolIdentity(webSiteName, config.AppPoolIdentity); err != nil {
+	if err := applyAppPoolIdentity(websiteName, config.AppPoolIdentity); err != nil {
 		return err
 	}
-	if err := createSite(webSiteName, config.Path, config.SiteConfigPath); err != nil {
+	if err := createSite(websiteName, config.Path, config.SiteConfigPath); err != nil {
 		return err
 	}
-	if err := applySiteAppPool(webSiteName, webSiteName); err != nil {
+	if err := applySiteAppPool(websiteName, websiteName); err != nil {
 		return err
 	}
-	if err := applySiteBindings(webSiteName, config.Bindings); err != nil {
+	if err := applySiteBindings(websiteName, config.Bindings); err != nil {
 		return err
 	}
 
@@ -584,22 +584,22 @@ func createWebsite(webSiteName string, config *TaskConfig) error {
 }
 
 // Deletes an Application Pool and Site with the given name
-func deleteWebsite(webSiteName string) error {
-	if err := deleteSite(webSiteName); err != nil {
+func deleteWebsite(websiteName string) error {
+	if err := deleteSite(websiteName); err != nil {
 		return err
 	}
-	if err := deleteAppPool(webSiteName); err != nil {
+	if err := deleteAppPool(websiteName); err != nil {
 		return err
 	}
 	return nil
 }
 
 // Returns if both Application Pool and Site exist with the given name
-func doesWebsiteExist(webSiteName string) (bool, error) {
-	if exists, err := doesAppPoolExist(webSiteName); err != nil || !exists {
+func doesWebsiteExist(websiteName string) (bool, error) {
+	if exists, err := doesAppPoolExist(websiteName); err != nil || !exists {
 		return false, err
 	}
-	if exists, err := doesSiteExist(webSiteName); err != nil || !exists {
+	if exists, err := doesSiteExist(websiteName); err != nil || !exists {
 		return false, err
 	}
 
@@ -607,8 +607,8 @@ func doesWebsiteExist(webSiteName string) (bool, error) {
 }
 
 // Returns the ProcessIds of a running Application Pool
-func getWebsiteProcessIds(webSiteName string) ([]int, error) {
-	if result, err := executeAppCmd("list", "wp", fmt.Sprintf("/apppool.name:%s", webSiteName)); err != nil {
+func getWebsiteProcessIds(websiteName string) ([]int, error) {
+	if result, err := executeAppCmd("list", "wp", fmt.Sprintf("/apppool.name:%s", websiteName)); err != nil {
 		return nil, fmt.Errorf("Failed to get Website Process Ids: %v", err)
 	} else {
 		var processIds []int
@@ -625,11 +625,11 @@ func getWebsiteProcessIds(webSiteName string) ([]int, error) {
 }
 
 // Gets the WMI CPU and Memory stats of a given website
-func getWebsiteStats(webSiteName string) (*wmiProcessStats, error) {
+func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
 	var processIds []string
 
-	// Get a list of process ids tied the app pool
-	result, err := executeAppCmd("list", "wp", fmt.Sprintf("/apppool.name:%s", webSiteName))
+	// Get a list of process ids tied to the app pool
+	result, err := executeAppCmd("list", "wp", fmt.Sprintf("/apppool.name:%s", websiteName))
 	if err != nil {
 		return nil, err
 	}
@@ -642,7 +642,7 @@ func getWebsiteStats(webSiteName string) (*wmiProcessStats, error) {
 	// No process ids means no stats.
 	// IIS sites/app pools can be in a state without an actively running process id.
 	if len(processIds) == 0 {
-		return nil, fmt.Errorf("No process ids were found!")
+		return nil, fmt.Errorf("Error in getting website stats, since no process id's were found!")
 	}
 
 	// Query WMI for cpu stats with the given process ids
@@ -676,11 +676,11 @@ func getWebsiteStats(webSiteName string) (*wmiProcessStats, error) {
 }
 
 // Returns if both Application Pool and Site are running with the given name
-func isWebsiteRunning(webSiteName string) (bool, error) {
-	if isRunning, err := isAppPoolRunning(webSiteName); err != nil || !isRunning {
+func isWebsiteRunning(websiteName string) (bool, error) {
+	if isRunning, err := isAppPoolRunning(websiteName); err != nil || !isRunning {
 		return false, err
 	}
-	if isRunning, err := isSiteRunning(webSiteName); err != nil || !isRunning {
+	if isRunning, err := isSiteRunning(websiteName); err != nil || !isRunning {
 		return false, err
 	}
 
@@ -688,11 +688,11 @@ func isWebsiteRunning(webSiteName string) (bool, error) {
 }
 
 // Starts both Application Pool and Site with the given name
-func startWebsite(webSiteName string) error {
-	if err := startAppPool(webSiteName); err != nil {
+func startWebsite(websiteName string) error {
+	if err := startAppPool(websiteName); err != nil {
 		return err
 	}
-	if err := startSite(webSiteName); err != nil {
+	if err := startSite(websiteName); err != nil {
 		return err
 	}
 
@@ -700,11 +700,11 @@ func startWebsite(webSiteName string) error {
 }
 
 // Stops both Application Pool and Site with the given name
-func stopWebsite(webSiteName string) error {
-	if err := stopSite(webSiteName); err != nil {
+func stopWebsite(websiteName string) error {
+	if err := stopSite(websiteName); err != nil {
 		return err
 	}
-	if err := stopAppPool(webSiteName); err != nil {
+	if err := stopAppPool(websiteName); err != nil {
 		return err
 	}
 
