@@ -23,8 +23,49 @@ type taskHandle struct {
 	startedAt      time.Time
 	completedAt    time.Time
 	exitResult     *drivers.ExitResult
-	pidCollector   *pidCollector
 	systemCpuStats *stats.CpuStats
+}
+
+func (h *taskHandle) stats(ctx context.Context, interval time.Duration) (<-chan *drivers.TaskResourceUsage, error) {
+	ch := make(chan *drivers.TaskResourceUsage)
+	go h.handleStats(ctx, ch, interval)
+	return ch, nil
+}
+
+func (h *taskHandle) handleStats(ctx context.Context, ch chan *drivers.TaskResourceUsage, interval time.Duration) {
+	defer close(ch)
+	timer := time.NewTimer(0)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-timer.C:
+			timer.Reset(interval)
+		}
+
+		t := time.Now()
+
+		// Collect task stats.
+		stats, err := h.getWebsiteStats(h.taskConfig.AllocID)
+		if err != nil {
+			h.logger.Error("Error in getting task stats for taskID: %s", h.taskConfig.ID)
+			return
+		}
+
+		taskResUsage := drivers.TaskResourceUsage{
+			ResourceUsage: &drivers.ResourceUsage{
+				CpuStats:    stats.KernelModeTime + stats.UserModeTime,
+				MemoryStats: stats.WorkingSetPrivate,
+			},
+			Timestamp: t.UTC().UnixNano(),
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case ch <- &taskResUsage:
+		}
+	}
 }
 
 func (h *taskHandle) TaskStatus() *drivers.TaskStatus {
