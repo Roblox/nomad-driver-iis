@@ -41,7 +41,7 @@ func (h *taskHandle) TaskStatus() *drivers.TaskStatus {
 	h.stateLock.RLock()
 	defer h.stateLock.RUnlock()
 
-	isRunning, err := isWebsiteRunning(h.TaskConfig.AllocID)
+	isRunning, err := isWebsiteRunning(h.taskConfig.AllocID)
 	if err != nil {
 		h.logger.Error("Error in getting task status: %v", err)
 		h.procState = drivers.TaskStateExited
@@ -85,7 +85,7 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 		return
 	}
 
-	var iisBindings []IISBinding
+	var iisBindings []iisBinding
 	for _, binding := range driverConfig.Bindings {
 		if binding.Port == 0 && binding.ResourcePort == "" {
 			errMsg := "Error in launching task: both binding.Port and binding.ResourcePort cannot be unset."
@@ -197,4 +197,9 @@ func (h *taskHandle) handleStats(ch chan *drivers.TaskResourceUsage, ctx context
 		case ch <- &taskResUsage:
 		}
 	}
+}
+
+func (h *taskHandle) shutdown(timeout time.Duration) error {
+	// TODO: Perform iis stop with timeout period
+	return nil
 }
