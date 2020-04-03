@@ -14,11 +14,6 @@ import (
 	"github.com/hashicorp/nomad/plugins/drivers"
 )
 
-var (
-	IISMeasuredCpuStats = []string{"Percent", "System Mode", "User Mode"}
-	IISMeasuredMemStats = []string{"RSS"}
-)
-
 // taskHandle should store all relevant runtime information
 // such as process ID if this is a local task or other meta
 // data if this driver deals with external APIs
@@ -164,24 +159,24 @@ func (h *taskHandle) handleStats(ch chan *drivers.TaskResourceUsage, ctx context
 
 		t := time.Now()
 
+		// Get IIS Worker Process stats if we can.
+		stats, err := getWebsiteStats(h.taskConfig.AllocID)
+		if err != nil {
+			h.logger.Error("Failed to get iis worker process stats:", "warn", err)
+			return
+		}
 		var cs drivers.CpuStats
 		var ms drivers.MemoryStats
 
-		// Get IIS Worker Process stats if we can.
-		// Errors should only be logged and allow stats to continue with empty results
-		if stats, err := getWebsiteStats(h.taskConfig.AllocID); err != nil {
-			h.logger.Warn("Failed to get iis worker process stats:", "warn", err)
-		} else {
-			total := stats.KernelModeTime + stats.UserModeTime
-			cs.SystemMode = h.systemCpuStats.Percent(float64(stats.KernelModeTime))
-			cs.UserMode = h.userCpuStats.Percent(float64(stats.UserModeTime))
-			cs.Percent = h.totalCpuStats.Percent(float64(total))
-			cs.TotalTicks = h.totalCpuStats.TicksConsumed(cs.Percent)
-			cs.Measured = IISMeasuredCpuStats
+		total := stats.KernelModeTime + stats.UserModeTime
+		cs.SystemMode = h.systemCpuStats.Percent(float64(stats.KernelModeTime))
+		cs.UserMode = h.userCpuStats.Percent(float64(stats.UserModeTime))
+		cs.Percent = h.totalCpuStats.Percent(float64(total))
+		cs.TotalTicks = h.totalCpuStats.TicksConsumed(cs.Percent)
+		cs.Measured = []string{"Percent", "System Mode", "User Mode"}
 
-			ms.RSS = stats.WorkingSetPrivate
-			ms.Measured = IISMeasuredMemStats
-		}
+		ms.RSS = stats.WorkingSetPrivate
+		ms.Measured = []string{"RSS"}
 
 		taskResUsage := drivers.TaskResourceUsage{
 			ResourceUsage: &drivers.ResourceUsage{
