@@ -1,13 +1,22 @@
 package iis
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/nomad/client/stats"
+	shelpers "github.com/hashicorp/nomad/helper/stats"
 	"github.com/hashicorp/nomad/plugins/drivers"
+)
+
+var (
+	IISMeasuredCpuStats = []string{"Percent", "System Mode", "User Mode"}
+	IISMeasuredMemStats = []string{"RSS"}
 )
 
 // taskHandle should store all relevant runtime information
@@ -23,7 +32,8 @@ type taskHandle struct {
 	startedAt      time.Time
 	completedAt    time.Time
 	exitResult     *drivers.ExitResult
-	pidCollector   *pidCollector
+	totalCpuStats  *stats.CpuStats
+	userCpuStats   *stats.CpuStats
 	systemCpuStats *stats.CpuStats
 }
 
@@ -58,6 +68,11 @@ func (h *taskHandle) IsRunning() bool {
 }
 
 func (h *taskHandle) run(driverConfig *TaskConfig) {
+	// Every executor runs this init at creation for stats
+	if err := shelpers.Init(); err != nil {
+		h.logger.Error("unable to initialize stats", "error", err)
+	}
+
 	if !filepath.IsAbs(driverConfig.Path) {
 		driverConfig.Path = filepath.Join(h.taskConfig.TaskDir().Dir, driverConfig.Path)
 	}
@@ -126,4 +141,60 @@ func (h *taskHandle) handleError(errMsg string, err error) {
 	h.exitResult.Err = err
 	h.procState = drivers.TaskStateUnknown
 	h.completedAt = time.Now()
+}
+
+func (h *taskHandle) Stats(ctx context.Context, interval time.Duration) (<-chan *drivers.TaskResourceUsage, error) {
+	ch := make(chan *drivers.TaskResourceUsage)
+	go h.handleStats(ch, ctx, interval)
+
+	return ch, nil
+}
+
+func (h *taskHandle) handleStats(ch chan *drivers.TaskResourceUsage, ctx context.Context, interval time.Duration) {
+	defer close(ch)
+	timer := time.NewTimer(0)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-timer.C:
+			timer.Reset(interval)
+		}
+
+		t := time.Now()
+
+		var cs drivers.CpuStats
+		var ms drivers.MemoryStats
+
+		// Get IIS Worker Process stats if we can.
+		// Errors should only be logged and allow stats to continue with empty results
+		if stats, err := getWebsiteStats(h.taskConfig.AllocID); err != nil {
+			h.logger.Warn("Failed to get iis worker process stats:", "warn", err)
+		} else {
+			total := stats.KernelModeTime + stats.UserModeTime
+			cs.SystemMode = h.systemCpuStats.Percent(float64(stats.KernelModeTime))
+			cs.UserMode = h.userCpuStats.Percent(float64(stats.UserModeTime))
+			cs.Percent = h.totalCpuStats.Percent(float64(total))
+			cs.TotalTicks = h.totalCpuStats.TicksConsumed(cs.Percent)
+			cs.Measured = IISMeasuredCpuStats
+
+			ms.RSS = stats.WorkingSetPrivate
+			ms.Measured = IISMeasuredMemStats
+		}
+
+		taskResUsage := drivers.TaskResourceUsage{
+			ResourceUsage: &drivers.ResourceUsage{
+				CpuStats:    &cs,
+				MemoryStats: &ms,
+			},
+			Timestamp: t.UTC().UnixNano(),
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case ch <- &taskResUsage:
+		}
+	}
 }
