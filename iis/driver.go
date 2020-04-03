@@ -283,6 +283,8 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		procState:      drivers.TaskStateRunning,
 		startedAt:      time.Now().Round(time.Millisecond),
 		logger:         d.logger,
+		totalCpuStats:  stats.NewCpuStats(),
+		userCpuStats:   stats.NewCpuStats(),
 		systemCpuStats: stats.NewCpuStats(),
 	}
 
@@ -328,6 +330,8 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		startedAt:      taskState.StartedAt,
 		exitResult:     &drivers.ExitResult{},
 		logger:         d.logger,
+		totalCpuStats:  stats.NewCpuStats(),
+		userCpuStats:   stats.NewCpuStats(),
 		systemCpuStats: stats.NewCpuStats(),
 	}
 
@@ -449,15 +453,7 @@ func (d *Driver) TaskStats(ctx context.Context, taskID string, interval time.Dur
 		return nil, drivers.ErrTaskNotFound
 	}
 
-	// TODO: implement driver specific logic to send task stats.
-	//
-	// This function returns a channel that Nomad will use to listen for task
-	// stats (e.g., CPU and memory usage) in a given interval. It should send
-	// stats until the context is canceled or the task stops running.
-	//
-	// In the example below we use the Stats function provided by the executor,
-	// but you can build a set of functions similar to the fingerprint process.
-	return handle.exec.Stats(ctx, interval)
+	return handle.Stats(ctx, interval)
 }
 
 // TaskEvents returns a channel that the plugin can use to emit task related events.
