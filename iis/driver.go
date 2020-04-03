@@ -365,20 +365,6 @@ func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *dr
 	// In the example below we block and wait until the executor finishes
 	// running, at which point we send the exit code and signal in the result
 	// channel.
-	//
-	// SKELETON EXAMPLE
-	//
-	// ps, err := handle.Wait(ctx)
-	// if err != nil {
-	// 	result = &drivers.ExitResult{
-	// 		Err: fmt.Errorf("executor: error waiting on process: %v", err),
-	// 	}
-	// } else {
-	// 	result = &drivers.ExitResult{
-	// 		ExitCode: ps.ExitCode,
-	// 		Signal:   ps.Signal,
-	// 	}
-	// }
 
 	for {
 		select {
@@ -422,19 +408,6 @@ func (d *Driver) DestroyTask(taskID string, force bool) error {
 	// Destroying a task includes removing any resources used by task and any
 	// local references in the plugin. If force is set to true the task should
 	// be destroyed even if it's currently running.
-	//
-	// In the example below we use the executor to force shutdown the task
-	// (timeout equals 0).
-	//
-	// SKELETON EXAMPLE
-	//
-	// if !handle.pluginClient.Exited() {
-	// 	if err := handle.exec.Shutdown("", 0); err != nil {
-	// 		handle.logger.Error("destroying executor failed", "err", err)
-	// 	}
-
-	// 	handle.pluginClient.Kill()
-	// }
 
 	d.tasks.Delete(taskID)
 	return nil
