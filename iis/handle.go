@@ -162,7 +162,7 @@ func (h *taskHandle) handleStats(ch chan *drivers.TaskResourceUsage, ctx context
 		// Get IIS Worker Process stats if we can.
 		stats, err := getWebsiteStats(h.taskConfig.AllocID)
 		if err != nil {
-			h.logger.Error("Failed to get iis worker process stats:", "warn", err)
+			h.logger.Error("Failed to get iis worker process stats:", "error", err)
 			return
 		}
 		var cs drivers.CpuStats
