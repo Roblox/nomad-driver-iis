@@ -3,10 +3,8 @@ package iis
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
-	"github.com/hashicorp/consul-template/signals"
 	"github.com/hashicorp/go-hclog"
 	log "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/client/stats"
@@ -337,7 +335,7 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 
 	d.tasks.Set(taskState.TaskConfig.ID, h)
 
-	go h.run()
+	go h.run(&driverConfig)
 	return nil
 }
 
@@ -367,17 +365,6 @@ func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *dr
 	// In the example below we block and wait until the executor finishes
 	// running, at which point we send the exit code and signal in the result
 	// channel.
-	ps, err := handle.exec.Wait(ctx)
-	if err != nil {
-		result = &drivers.ExitResult{
-			Err: fmt.Errorf("executor: error waiting on process: %v", err),
-		}
-	} else {
-		result = &drivers.ExitResult{
-			ExitCode: ps.ExitCode,
-			Signal:   ps.Signal,
-		}
-	}
 
 	for {
 		select {
@@ -398,7 +385,7 @@ func (d *Driver) StopTask(taskID string, timeout time.Duration, signal string) e
 		return drivers.ErrTaskNotFound
 	}
 
-	if err := handle.shutdown(); err != nil {
+	if err := handle.shutdown(timeout); err != nil {
 		return fmt.Errorf("Error stopping iis task: %v", err)
 	}
 
@@ -421,16 +408,6 @@ func (d *Driver) DestroyTask(taskID string, force bool) error {
 	// Destroying a task includes removing any resources used by task and any
 	// local references in the plugin. If force is set to true the task should
 	// be destroyed even if it's currently running.
-	//
-	// In the example below we use the executor to force shutdown the task
-	// (timeout equals 0).
-	if !handle.pluginClient.Exited() {
-		if err := handle.exec.Shutdown("", 0); err != nil {
-			handle.logger.Error("destroying executor failed", "err", err)
-		}
-
-		handle.pluginClient.Kill()
-	}
 
 	d.tasks.Delete(taskID)
 	return nil
@@ -463,25 +440,9 @@ func (d *Driver) TaskEvents(ctx context.Context) (<-chan *drivers.TaskEvent, err
 
 // SignalTask forwards a signal to a task.
 // This is an optional capability.
+// TODO: Loop back on signal viability for worker processes
 func (d *Driver) SignalTask(taskID string, signal string) error {
-	handle, ok := d.tasks.Get(taskID)
-	if !ok {
-		return drivers.ErrTaskNotFound
-	}
-
-	// TODO: implement driver specific signal handling logic.
-	//
-	// The given signal must be forwarded to the target taskID. If this plugin
-	// doesn't support receiving signals (capability SendSignals is set to
-	// false) you can just return nil.
-	sig := os.Interrupt
-	if s, ok := signals.SignalLookup[signal]; ok {
-		sig = s
-	} else {
-		d.logger.Warn("unknown signal to send to task, using SIGINT instead", "signal", signal, "task_id", handle.taskConfig.ID)
-
-	}
-	return handle.exec.Signal(sig)
+	return fmt.Errorf("This driver does not support signals")
 }
 
 // ExecTask returns the result of executing the given command inside a task.
