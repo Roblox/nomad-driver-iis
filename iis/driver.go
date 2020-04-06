@@ -402,12 +402,7 @@ func (d *Driver) DestroyTask(taskID string, force bool) error {
 	// Destroying a task includes removing any resources used by task and any
 	// local references in the plugin. If force is set to true the task should
 	// be destroyed even if it's currently running.
-	isRunning, err := isWebsiteRunning(handle.taskConfig.AllocID)
-	if err != nil{
-		return fmt.Errorf("failed to get website's state: ", err)
-	}
-
-	if (isRunning || handle.IsRunning()) && !force {
+	if handle.IsRunning() && !force {
 		return fmt.Errorf("cannot destroy running task")
 	}
 
