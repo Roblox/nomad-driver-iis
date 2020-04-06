@@ -403,11 +403,9 @@ func (d *Driver) DestroyTask(taskID string, force bool) error {
 		return fmt.Errorf("cannot destroy running task")
 	}
 
-	// TODO: implement driver specific logic to destroy a complete task.
-	//
-	// Destroying a task includes removing any resources used by task and any
-	// local references in the plugin. If force is set to true the task should
-	// be destroyed even if it's currently running.
+	if err := handle.cleanup(); err != nil {
+		return err
+	}
 
 	d.tasks.Delete(taskID)
 	return nil

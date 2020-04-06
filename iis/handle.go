@@ -198,3 +198,12 @@ func (h *taskHandle) shutdown(timeout time.Duration) error {
 	// TODO: Perform iis stop with timeout period
 	return nil
 }
+
+func (h *taskHandle) cleanup() error {
+	err := deleteWebsite(h.taskConfig.AllocID)
+	if err != nil {
+		return fmt.Errorf("Error in destroying website: %v", err)
+	}
+
+	return nil
+}
