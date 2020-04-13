@@ -73,7 +73,7 @@ var (
 			"hostname":      hclspec.NewAttr("hostname", "string", false),
 			"ipaddress":     hclspec.NewAttr("ipaddress", "string", false),
 			"resource_port": hclspec.NewAttr("resource_port", "string", false),
-			"port":          hclspec.NewAttr("port", "integer", false),
+			"port":          hclspec.NewAttr("port", "number", false),
 			"type":          hclspec.NewAttr("type", "string", false),
 			"cert_hash":     hclspec.NewAttr("cert_hash", "string", false),
 		})),
@@ -281,6 +281,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		procState:      drivers.TaskStateRunning,
 		startedAt:      time.Now().Round(time.Millisecond),
 		logger:         d.logger,
+		websiteStopped:  make(chan interface{}),
 		totalCpuStats:  stats.NewCpuStats(),
 		userCpuStats:   stats.NewCpuStats(),
 		systemCpuStats: stats.NewCpuStats(),
@@ -328,6 +329,7 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		startedAt:      taskState.StartedAt,
 		exitResult:     &drivers.ExitResult{},
 		logger:         d.logger,
+		websiteStopped:  make(chan interface{}),
 		totalCpuStats:  stats.NewCpuStats(),
 		userCpuStats:   stats.NewCpuStats(),
 		systemCpuStats: stats.NewCpuStats(),
@@ -365,6 +367,14 @@ func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *dr
 	// In the example below we block and wait until the executor finishes
 	// running, at which point we send the exit code and signal in the result
 	// channel.
+
+	//handle.wait(ctx context.Context)
+	err := handle.Wait(ctx)
+	if err != nil {
+		result = &drivers.ExitResult{
+			Err: fmt.Errorf("executor: error waiting on process: %v", err),
+		}
+	}
 
 	for {
 		select {

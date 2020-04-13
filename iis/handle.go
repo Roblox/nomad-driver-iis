@@ -27,6 +27,7 @@ type taskHandle struct {
 	startedAt      time.Time
 	completedAt    time.Time
 	exitResult     *drivers.ExitResult
+	websiteStopped chan interface{}
 	totalCpuStats  *stats.CpuStats
 	userCpuStats   *stats.CpuStats
 	systemCpuStats *stats.CpuStats
@@ -35,16 +36,6 @@ type taskHandle struct {
 func (h *taskHandle) TaskStatus() *drivers.TaskStatus {
 	h.stateLock.RLock()
 	defer h.stateLock.RUnlock()
-
-	isRunning, err := isWebsiteRunning(h.taskConfig.AllocID)
-	if err != nil {
-		h.logger.Error("Error in getting task status: %v", err)
-		h.procState = drivers.TaskStateExited
-	}
-
-	if !isRunning {
-		h.procState = drivers.TaskStateExited
-	}
 
 	return &drivers.TaskStatus{
 		ID:          h.taskConfig.ID,
@@ -128,6 +119,8 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 		h.handleError(errMsg, err)
 		return
 	}
+
+	go h.wait()
 }
 
 // handleError will log the error message (errMsg) and update the task handle with exit results.
@@ -162,7 +155,7 @@ func (h *taskHandle) handleStats(ch chan *drivers.TaskResourceUsage, ctx context
 		// Get IIS Worker Process stats if we can.
 		stats, err := getWebsiteStats(h.taskConfig.AllocID)
 		if err != nil {
-			h.logger.Error("Failed to get iis worker process stats:", "error", err)
+			//h.logger.Error("Failed to get iis worker process stats:", "error", err)
 			return
 		}
 		var cs drivers.CpuStats
@@ -194,8 +187,45 @@ func (h *taskHandle) handleStats(ch chan *drivers.TaskResourceUsage, ctx context
 	}
 }
 
+func (h *taskHandle) wait() {
+	defer close(h.websiteStopped)
+	for {
+		isRunning, err := isWebsiteRunning(h.taskConfig.AllocID)
+		if err != nil {
+			h.logger.Error("Error in getting task status: %v", err)
+			h.procState = drivers.TaskStateExited
+			return
+		}
+		if !isRunning {
+			h.procState = drivers.TaskStateExited
+			return
+		}
+	}
+}
+
+func (h *taskHandle) Wait(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-h.websiteStopped:
+		return nil
+	}
+}
+
 func (h *taskHandle) shutdown(timeout time.Duration) error {
-	// TODO: Perform iis stop with timeout period
+	// Ensure IIS is up to date with timeout config before turning off
+	err := applyWebsiteShutdownTimeout(h.taskConfig.AllocID, timeout)
+	if err != nil {
+		return err
+	}
+
+	// Stops future traffic for website
+	// Existing connections will remain until timeout is hit
+	err = stopWebsite(h.taskConfig.AllocID)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

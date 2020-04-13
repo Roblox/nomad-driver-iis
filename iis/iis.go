@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"math"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	wmi "github.com/StackExchange/wmi"
 )
@@ -239,6 +241,16 @@ func applyAppPoolIdentity(appPoolName string, appPoolIdentity iisAppPoolIdentity
 	return nil
 }
 
+// Applies a shutdown timeout in secs to ensure worker processes are terminated in a timely fashion
+func applyAppPoolShutdownTimeout(appPoolName string, timeout time.Duration) error {
+	timeoutStr := fmt.Sprintf("%02d:%02d:%02d", int32(math.Floor(timeout.Hours())), int32(math.Floor(timeout.Minutes())), int32(math.Floor(timeout.Seconds())))
+	if _, err := executeAppCmd("set", "config", "/section:applicationPools", fmt.Sprintf("/[name='%s'].processModel.shutdownTimeLimit:%s", appPoolName, timeoutStr)); err != nil {
+		return fmt.Errorf("Failed to set Application Pool shutdown timeout: %v", err)
+	}
+
+	return nil
+}
+
 // Creates an Application Pool with the given name and applies an IIS exported Application Pool xml if a path is provided
 func createAppPool(appPoolName string, configPath string) error {
 	if exists, err := doesAppPoolExist(appPoolName); err != nil || exists {
@@ -301,7 +313,7 @@ func getAppPools() ([]appCmdAppPool, error) {
 
 // Returns if an Application Pool with the given name is running in IIS
 func isAppPoolRunning(appPoolName string) (bool, error) {
-	if appPool, err := getAppPool(appPoolName, false); err != nil {
+	if appPool, err := getAppPool(appPoolName, false); err != nil || appPool == nil {
 		return false, err
 	} else {
 		return strings.ToLower(appPool.State) == "started", nil
@@ -560,6 +572,11 @@ func applySiteAppPool(siteName string, appPoolName string) error {
 	}
 
 	return nil
+}
+
+// Applies shutdown timeouts where appropriate to the website
+func applyWebsiteShutdownTimeout(webSiteName string, timeout time.Duration) error {
+	return applyAppPoolShutdownTimeout(webSiteName, timeout)
 }
 
 // Creates an Application Pool and Site with the given configuration
