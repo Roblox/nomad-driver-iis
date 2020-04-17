@@ -311,8 +311,8 @@ func getAppPools() ([]appCmdAppPool, error) {
 	}
 }
 
-// Returns if an Application Pool with the given name is running in IIS
-func isAppPoolRunning(appPoolName string) (bool, error) {
+// Returns if an Application Pool with the given name is started in IIS
+func isAppPoolStarted(appPoolName string) (bool, error) {
 	if appPool, err := getAppPool(appPoolName, false); err != nil || appPool == nil {
 		return false, err
 	} else {
@@ -322,7 +322,7 @@ func isAppPoolRunning(appPoolName string) (bool, error) {
 
 // Starts an Application Pool with the given name in IIS
 func startAppPool(appPoolName string) error {
-	if isRunning, err := isAppPoolRunning(appPoolName); err != nil || isRunning {
+	if isStarted, err := isAppPoolStarted(appPoolName); err != nil || isStarted {
 		return err
 	}
 
@@ -335,7 +335,7 @@ func startAppPool(appPoolName string) error {
 
 // Stops an Application Pool with the given name in IIS
 func stopAppPool(appPoolName string) error {
-	if isRunning, err := isAppPoolRunning(appPoolName); err != nil || !isRunning {
+	if isStarted, err := isAppPoolStarted(appPoolName); err != nil || !isStarted {
 		return err
 	}
 
@@ -530,8 +530,8 @@ func getSites() ([]appCmdSite, error) {
 	}
 }
 
-// Returns if a Site with the given name is running in IIS
-func isSiteRunning(siteName string) (bool, error) {
+// Returns if a Site with the given name is started in IIS
+func isSiteStarted(siteName string) (bool, error) {
 	if site, err := getSite(siteName, false); err != nil || site == nil {
 		return false, err
 	} else {
@@ -541,7 +541,7 @@ func isSiteRunning(siteName string) (bool, error) {
 
 // Starts a Site with the given name in IIS
 func startSite(siteName string) error {
-	if isRunning, err := isSiteRunning(siteName); err != nil || isRunning {
+	if isRunning, err := isSiteStarted(siteName); err != nil || isRunning {
 		return err
 	}
 
@@ -554,7 +554,7 @@ func startSite(siteName string) error {
 
 // Stops a Site with the given name in IIS
 func stopSite(siteName string) error {
-	if isRunning, err := isSiteRunning(siteName); err != nil || !isRunning {
+	if isRunning, err := isSiteStarted(siteName); err != nil || !isRunning {
 		return err
 	}
 
@@ -623,37 +623,45 @@ func doesWebsiteExist(websiteName string) (bool, error) {
 	return true, nil
 }
 
-// Returns the ProcessIds of a running Application Pool
-func getWebsiteProcessIds(websiteName string) ([]int, error) {
-	if result, err := executeAppCmd("list", "wp", fmt.Sprintf("/apppool.name:%s", websiteName)); err != nil {
+// Returns the ProcessIds of a running Application Pool as string slice
+func getWebsiteProcessIdsStr(websiteName string) ([]string, error) {
+	result, err := executeAppCmd("list", "wp", fmt.Sprintf("/apppool.name:%s", websiteName))
+	if err != nil {
 		return nil, fmt.Errorf("Failed to get Website Process Ids: %v", err)
-	} else {
-		var processIds []int
-		for _, wp := range result.WorkerProcesses {
-			if newProcessID, err := strconv.Atoi(wp.Name); err != nil {
-				return nil, fmt.Errorf("Failed to parse Website Process Ids: %v", err)
-			} else {
-				processIds = append(processIds, newProcessID)
-			}
-		}
-
-		return processIds, nil
 	}
+	var processIds []string
+	for _, wp := range result.WorkerProcesses {
+		processIds = append(processIds, wp.Name)
+	}
+
+	return processIds, nil
 }
 
-// Gets the WMI CPU and Memory stats of a given website
-func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
-	var processIds []string
-
-	// Get a list of process ids tied to the app pool
-	result, err := executeAppCmd("list", "wp", fmt.Sprintf("/apppool.name:%s", websiteName))
+// Returns the ProcessIds of a running Application Pool
+func getWebsiteProcessIds(websiteName string) ([]int, error) {
+	result, err := getWebsiteProcessIdsStr( websiteName)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get a slice of process id strings for WQL queries
-	for _, wp := range result.WorkerProcesses {
-		processIds = append(processIds, wp.Name)
+	var processIds []int
+	for _, id := range result {
+		newProcessId, err := strconv.Atoi(id)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to parse Website Process Ids: %v", err)
+		}
+		processIds = append(processIds, newProcessId)
+	}
+
+	return processIds, nil
+}
+
+// Gets the WMI CPU and Memory stats of a given website
+func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
+	// Get a list of process ids tied to the app pool
+	processIds, err := getWebsiteProcessIdsStr(websiteName)
+	if err != nil {
+		return nil, err
 	}
 
 	// No process ids means no stats.
@@ -696,12 +704,28 @@ func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
 	return &stats, nil
 }
 
-// Returns if both Application Pool and Site are running with the given name
-func isWebsiteRunning(websiteName string) (bool, error) {
-	if isRunning, err := isAppPoolRunning(websiteName); err != nil || !isRunning {
+func isWebsiteStarted(websiteName string) (bool, error) {
+	if isStarted, err := isAppPoolStarted(websiteName); err != nil || !isStarted {
 		return false, err
 	}
-	if isRunning, err := isSiteRunning(websiteName); err != nil || !isRunning {
+	if isStarted, err := isSiteStarted(websiteName); err != nil || !isStarted {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// Returns if the Application Pool has running processes or both Application Pool and Site are started with the given name
+func isWebsiteRunning(websiteName string) (bool, error) {
+	processIds, err := getWebsiteProcessIdsStr(websiteName)
+	if err != nil {
+		return false, err
+	}
+	if len(processIds) != 0 {
+		return true, nil
+	}
+
+	if isRunning, err := isWebsiteStarted(websiteName); err != nil || !isRunning {
 		return false, err
 	}
 

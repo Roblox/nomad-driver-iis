@@ -359,8 +359,8 @@ func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *dr
 
 	timer := time.NewTimer(0)
 
-	// TODO: We may need to do a check in case a website is unable to start before setting bool
-	// Blocker code to monitor current task running status. On IIS task not running, set driver exit result and return.
+	// Blocker code to monitor current task running status.
+	// On IIS task not running, set driver exit result and return.
 	for {
 		select {
 		case <-timer.C:
@@ -368,8 +368,6 @@ func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *dr
 		}
 
 		if handle.websiteStarted {
-			// TODO: Add a check for ProcessIds executing as well
-			// IIS may "Stop" an AppPool/Site, but depending on the shutdown time period PIDs may still be running and responding to pre-existing connections.
 			isRunning, err := isWebsiteRunning(handle.taskConfig.AllocID)
 			if err != nil {
 				result = &drivers.ExitResult{
@@ -461,7 +459,7 @@ func (d *Driver) TaskEvents(ctx context.Context) (<-chan *drivers.TaskEvent, err
 
 // SignalTask forwards a signal to a task.
 // This is an optional capability.
-// TODO: Loop back on signal viability for worker processes
+// IIS doesn't natively allow users to send signals, so this driver will abide by that.
 func (d *Driver) SignalTask(taskID string, signal string) error {
 	return fmt.Errorf("This driver does not support signals")
 }
@@ -469,6 +467,5 @@ func (d *Driver) SignalTask(taskID string, signal string) error {
 // ExecTask returns the result of executing the given command inside a task.
 // This is an optional capability.
 func (d *Driver) ExecTask(taskID string, cmd []string, timeout time.Duration) (*drivers.ExecTaskResult, error) {
-	// TODO: implement driver specific logic to execute commands in a task.
 	return nil, fmt.Errorf("This driver does not support exec")
 }
