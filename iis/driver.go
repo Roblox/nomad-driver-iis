@@ -281,10 +281,10 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		procState:      drivers.TaskStateRunning,
 		startedAt:      time.Now().Round(time.Millisecond),
 		logger:         d.logger,
-		websiteStopped:  make(chan interface{}),
 		totalCpuStats:  stats.NewCpuStats(),
 		userCpuStats:   stats.NewCpuStats(),
 		systemCpuStats: stats.NewCpuStats(),
+		websiteStarted: false,
 	}
 
 	driverState := TaskState{
@@ -329,10 +329,10 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		startedAt:      taskState.StartedAt,
 		exitResult:     &drivers.ExitResult{},
 		logger:         d.logger,
-		websiteStopped:  make(chan interface{}),
 		totalCpuStats:  stats.NewCpuStats(),
 		userCpuStats:   stats.NewCpuStats(),
 		systemCpuStats: stats.NewCpuStats(),
+		websiteStarted: false,
 	}
 
 	d.tasks.Set(taskState.TaskConfig.ID, h)
@@ -357,22 +357,32 @@ func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *dr
 	defer close(ch)
 	var result *drivers.ExitResult
 
-	// TODO: implement driver specific logic to notify Nomad the task has been
-	// completed and what was the exit result.
-	//
-	// When a result is sent in the result channel Nomad will stop the task and
-	// emit an event that an operator can use to get an insight on why the task
-	// stopped.
-	//
-	// In the example below we block and wait until the executor finishes
-	// running, at which point we send the exit code and signal in the result
-	// channel.
+	timer := time.NewTimer(0)
 
-	//handle.wait(ctx context.Context)
-	err := handle.Wait(ctx)
-	if err != nil {
-		result = &drivers.ExitResult{
-			Err: fmt.Errorf("executor: error waiting on process: %v", err),
+	// TODO: We may need to do a check in case a website is unable to start before setting bool
+	// Blocker code to monitor current task running status. On IIS task not running, set driver exit result and return.
+	for {
+		select {
+		case <-timer.C:
+			timer.Reset(time.Second)
+		}
+
+		if handle.websiteStarted {
+			// TODO: Add a check for ProcessIds executing as well
+			// IIS may "Stop" an AppPool/Site, but depending on the shutdown time period PIDs may still be running and responding to pre-existing connections.
+			isRunning, err := isWebsiteRunning(handle.taskConfig.AllocID)
+			if err != nil {
+				result = &drivers.ExitResult{
+					Err: fmt.Errorf("executor: error waiting on process: %v", err),
+				}
+				break
+			}
+			if !isRunning {
+				result = &drivers.ExitResult{
+					ExitCode: 0,
+				}
+				break
+			}
 		}
 	}
 

@@ -27,10 +27,10 @@ type taskHandle struct {
 	startedAt      time.Time
 	completedAt    time.Time
 	exitResult     *drivers.ExitResult
-	websiteStopped chan interface{}
 	totalCpuStats  *stats.CpuStats
 	userCpuStats   *stats.CpuStats
 	systemCpuStats *stats.CpuStats
+	websiteStarted bool
 }
 
 func (h *taskHandle) TaskStatus() *drivers.TaskStatus {
@@ -120,7 +120,7 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 		return
 	}
 
-	go h.wait()
+	h.websiteStarted = true
 }
 
 // handleError will log the error message (errMsg) and update the task handle with exit results.
@@ -150,69 +150,53 @@ func (h *taskHandle) handleStats(ch chan *drivers.TaskResourceUsage, ctx context
 			timer.Reset(interval)
 		}
 
-		t := time.Now()
-
 		// Get IIS Worker Process stats if we can.
 		stats, err := getWebsiteStats(h.taskConfig.AllocID)
 		if err != nil {
-			//h.logger.Error("Failed to get iis worker process stats:", "error", err)
+			h.logger.Error("Failed to get iis worker process stats:", "error", err)
 			return
-		}
-		var cs drivers.CpuStats
-		var ms drivers.MemoryStats
-
-		total := stats.KernelModeTime + stats.UserModeTime
-		cs.SystemMode = h.systemCpuStats.Percent(float64(stats.KernelModeTime))
-		cs.UserMode = h.userCpuStats.Percent(float64(stats.UserModeTime))
-		cs.Percent = h.totalCpuStats.Percent(float64(total))
-		cs.TotalTicks = h.totalCpuStats.TicksConsumed(cs.Percent)
-		cs.Measured = []string{"Percent", "System Mode", "User Mode"}
-
-		ms.RSS = stats.WorkingSetPrivate
-		ms.Measured = []string{"RSS"}
-
-		taskResUsage := drivers.TaskResourceUsage{
-			ResourceUsage: &drivers.ResourceUsage{
-				CpuStats:    &cs,
-				MemoryStats: &ms,
-			},
-			Timestamp: t.UTC().UnixNano(),
 		}
 
 		select {
 		case <-ctx.Done():
 			return
-		case ch <- &taskResUsage:
+		case ch <- h.getTaskResourceUsage(stats):
 		}
 	}
 }
 
-func (h *taskHandle) wait() {
-	defer close(h.websiteStopped)
-	for {
-		isRunning, err := isWebsiteRunning(h.taskConfig.AllocID)
-		if err != nil {
-			h.logger.Error("Error in getting task status: %v", err)
-			h.procState = drivers.TaskStateExited
-			return
-		}
-		if !isRunning {
-			h.procState = drivers.TaskStateExited
-			return
-		}
-	}
-}
+// Convert IIS WMI Tasks Info to driver TaskResourceUsage expected input
+func (h *taskHandle) getTaskResourceUsage(iisStats *wmiProcessStats) *drivers.TaskResourceUsage {
+	ts := time.Now().UTC().UnixNano()
 
-func (h *taskHandle) Wait(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-h.websiteStopped:
-		return nil
+	totalPercent := h.totalCpuStats.Percent(float64(iisStats.KernelModeTime + iisStats.UserModeTime))
+	cs := &drivers.CpuStats{
+		SystemMode: h.systemCpuStats.Percent(float64(iisStats.KernelModeTime)),
+		UserMode:   h.userCpuStats.Percent(float64(iisStats.UserModeTime)),
+		Percent:    totalPercent,
+		Measured:   []string{"Percent", "System Mode", "User Mode"},
+		TotalTicks: h.totalCpuStats.TicksConsumed(totalPercent),
+	}
+
+	ms := &drivers.MemoryStats{
+		RSS:      iisStats.WorkingSetPrivate,
+		Measured: []string{"RSS"},
+	}
+
+	resourceUsage := drivers.ResourceUsage{
+		MemoryStats: ms,
+		CpuStats:    cs,
+	}
+	return &drivers.TaskResourceUsage{
+		ResourceUsage: &resourceUsage,
+		Timestamp: ts,
 	}
 }
 
 func (h *taskHandle) shutdown(timeout time.Duration) error {
+	h.stateLock.Lock()
+	defer h.stateLock.Unlock()
+
 	// Ensure IIS is up to date with timeout config before turning off
 	err := applyWebsiteShutdownTimeout(h.taskConfig.AllocID, timeout)
 	if err != nil {
@@ -226,7 +210,9 @@ func (h *taskHandle) shutdown(timeout time.Duration) error {
 		return err
 	}
 
-	return nil
+	// TODO: Wait til timeout for force deletion
+
+	return h.cleanup()
 }
 
 func (h *taskHandle) cleanup() error {

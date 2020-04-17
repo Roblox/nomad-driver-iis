@@ -659,7 +659,11 @@ func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
 	// No process ids means no stats.
 	// IIS sites/app pools can be in a state without an actively running process id.
 	if len(processIds) == 0 {
-		return nil, fmt.Errorf("Error in getting website stats, since no process id's were found!")
+		return &wmiProcessStats{
+			WorkingSetPrivate: 0,
+			KernelModeTime: 0,
+			UserModeTime: 0,
+		}, nil
 	}
 
 	// Query WMI for cpu stats with the given process ids

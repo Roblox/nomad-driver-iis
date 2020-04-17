@@ -22,12 +22,12 @@ job "iis-test" {
         }
         bindings {
           type = "http"
-          port = "httplabel"
+          resource_port = "httplabel"
         }
       }
       resources {
-        cpu    = 7200
-        memory = 1000
+        cpu    = 100
+        memory = 20
         network {
           port "httplabel" {}
         }
