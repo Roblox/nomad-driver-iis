@@ -5,7 +5,7 @@ export GOOS=windows
 default: build
 
 .PHONY: clean
-clean: ## Remove build artifacts
+clean:
 	rm -rf ${PLUGIN_BINARY}
 	vagrant destroy -f
 
@@ -16,13 +16,7 @@ up:
 	vagrant up
 
 converge: build up
-	vagrant provision
+	  vagrant provision
 
-verify_integration:
+test:   converge
 	vagrant winrm -s cmd -c 'chdir C:\vagrant && go test ./iis/ -count=1 -v'
-verify_functional:
-	vagrant winrm -s cmd -c 'chdir C:\vagrant && go test tests\common.go tests\driver_test.go -count=1 -v'
-verify:
-	vagrant winrm -s cmd -c 'chdir C:\vagrant && go test github.com/roblox/nomad-driver-iis/tests -count=1'
-
-test: clean converge verify
