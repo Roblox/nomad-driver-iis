@@ -639,7 +639,7 @@ func getWebsiteProcessIdsStr(websiteName string) ([]string, error) {
 
 // Returns the ProcessIds of a running Application Pool
 func getWebsiteProcessIds(websiteName string) ([]int, error) {
-	result, err := getWebsiteProcessIdsStr( websiteName)
+	result, err := getWebsiteProcessIdsStr(websiteName)
 	if err != nil {
 		return nil, err
 	}
@@ -669,8 +669,8 @@ func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
 	if len(processIds) == 0 {
 		return &wmiProcessStats{
 			WorkingSetPrivate: 0,
-			KernelModeTime: 0,
-			UserModeTime: 0,
+			KernelModeTime:    0,
+			UserModeTime:      0,
 		}, nil
 	}
 

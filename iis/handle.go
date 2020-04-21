@@ -189,7 +189,7 @@ func (h *taskHandle) getTaskResourceUsage(iisStats *wmiProcessStats) *drivers.Ta
 	}
 	return &drivers.TaskResourceUsage{
 		ResourceUsage: &resourceUsage,
-		Timestamp: ts,
+		Timestamp:     ts,
 	}
 }
 
@@ -221,17 +221,17 @@ func (h *taskHandle) shutdown(timeout time.Duration) error {
 				c <- err
 			}
 		}
-	} ()
+	}()
 
 	// Either the website stops or timeout occurs.
 	// After either event, attempt to remove IIS Website.
 	select {
-		case err := <-c:
-			if err != nil {
-				h.logger.Error("error stopping website... force killing", "error", err)
-			}
-		case <-time.After(timeout):
-			h.logger.Error("website failed to stop in a timely manner... force killing", "error", err)
+	case err := <-c:
+		if err != nil {
+			h.logger.Error("error stopping website... force killing", "error", err)
+		}
+	case <-time.After(timeout):
+		h.logger.Error("website failed to stop in a timely manner... force killing", "error", err)
 	}
 
 	return h.cleanup()
