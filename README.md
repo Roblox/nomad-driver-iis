@@ -1,84 +1,67 @@
-Nomad Skeleton Driver Plugin
+Nomad IIS Driver
 ==========
 
-Skeleton project for
-[Nomad task driver plugins](https://www.nomadproject.io/docs/drivers/index.html).
+A driver plugin for nomad to orchestrate windows IIS website tasks.
 
-This project is intended for bootstrapping development of a new task driver
-plugin.
-
-- Website: [https://www.nomadproject.io](https://www.nomadproject.io)
-- Mailing list: [Google Groups](http://groups.google.com/group/nomad-tool)
+A "Website" is a combination of an application pool and a site (app, vdir, etc.).<br/>
+Each allocation will create an application pool and site with the name being the allocation ID (guid).
 
 Requirements
 -------------------
 
-- [Nomad](https://www.nomadproject.io/downloads.html) v0.9+
-- [Go](https://golang.org/doc/install) v1.11 or later (to build the plugin)
+- [Nomad](https://www.nomadproject.io/downloads.html) >=v0.11
+- [Go](https://golang.org/doc/install) >=v1.11 (to build the provider plugin)
+- [Vagrant](https://www.vagrantup.com/downloads.html) >=v2.2
+- [VirtualBox](https://www.virtualbox.org/) v6.0 (or any version vagrant is compatible with)
 
-Building the Skeleton Plugin
+Building the driver
 -------------------
 
-[Generate](https://github.com/hashicorp/nomad-skeleton-driver-plugin/generate)
-a new repository in your account from this template by clicking the `Use this
-template` button above.
+````
+$ mkdir -p $GOPATH/src/github.com/Roblox
+$ cd $GOPATH/src/github.com/Roblox
+$ git clone git@github.com:Roblox/nomad-driver-iis.git
+$ cd nomad-driver-iis
+$ make build (This will build your nomad-driver-iis executable)
+````
 
-Clone the repository somewhere in your computer. This project uses
-[Go modules](https://blog.golang.org/using-go-modules) so you will need to set
-the environment variable `GO111MODULE=on` or work outside your `GOPATH` if it
-is set to `auto` or not declared.
+Tests
+------------------
+````
+$ make test
+````
+This will run nomad-driver-iis tests in the provisioned vagrant VM.
 
-```sh
-$ git clone git@github.com:<ORG>/<REPO>git
-```
+Contributing to nomad-iis-driver
+------------------
+Want to fix a bug, update documentation or add a feature?<br/>
+PR's are welcome!!<br/>
+Test your changes locally before contributing.
 
-Enter the plugin directory and update the paths in `go.mod` and `main.go` to
-match your repository path.
+The easiest way to test your changes is `make converge`.<br/>
+`make converge` will:
 
-```diff
-// go.mod
+1) Build the executable (iis-driver.exe)<br/>
+2) Spin up a vagrant VM (`vagrant up`) if it's not already running.<br/>
+3) Provision your changes into the VM (`vagrant provision`)<br/>
 
-- module github.com/hashicorp/nomad-skeleton-driver-plugin
-+ module github.com/<ORG>/<REPO>
-...
-```
+Once you are in the VM:
 
-```diff
-// main.go
+1) nomad-driver-iis codebase (hostpath) is mounted at `C:\vagrant` in the VM.<br/>
+2) Plugin (executable) is available at `C:\ProgramData\nomad\plugin`<br/>
+3) Logs are available at `C:\ProgramData\nomad\logs`.<br/>
+4) Tail on logs in powershell:<br/>
+   ````
+   $ Get-Content -path "C:\ProgramData\nomad\logs\nomad-output.log" -wait
+   ````
+5) Launch an example IIS website:
+   ````
+   $ nomad job run C:\vagrant\examples\iis-test.nomad
+   ````
 
-package main
-
-import (
-    log "github.com/hashicorp/go-hclog"
--   "github.com/hashicorp/nomad-skeleton-driver-plugin/hello"
-+.  "github.com/<REPO>/<ORG>/hello"
-...
-
-```
-
-Build the skeleton plugin.
-
-```sh
-$ make build
-```
-
-## Deploying Driver Plugins in Nomad
-
-The initial version of the skeleton is a simple task that outputs a greeting.
-You can try it out by starting a Nomad agent and running the job provided in
-the `example` folder:
-
-```sh
-$ make build
-$ nomad agent -dev -config=./example/agent.hcl -plugin-dir=$(pwd)
-
-# in another shell
-$ nomad run ./example/example.nomad
-$ nomad logs <ALLOCATION ID>
-```
-
-Code Organization
+Cleanup
 -------------------
-Follow the comments marked with a `TODO` tag to implement your driver's logic.
-For more information check the
-[Nomad documentation on plugins](https://www.nomadproject.io/docs/internals/plugins/index.html).
+````
+make clean
+````
+This will destroy your vagrant VM (along with all your changes) and remove the executable (iis-driver.exe).
