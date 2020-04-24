@@ -357,16 +357,9 @@ func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *dr
 	defer close(ch)
 	var result *drivers.ExitResult
 
-	timer := time.NewTimer(0)
-
 	// Blocker code to monitor current task running status.
 	// On IIS task not running, set driver exit result and return.
 	for {
-		select {
-		case <-timer.C:
-			timer.Reset(time.Second)
-		}
-
 		if handle.websiteStarted {
 			isRunning, err := isWebsiteRunning(handle.taskConfig.AllocID)
 			if err != nil {
@@ -382,6 +375,7 @@ func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *dr
 				break
 			}
 		}
+		time.Sleep(time.Second * 5)
 	}
 
 	for {

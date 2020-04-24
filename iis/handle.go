@@ -166,30 +166,28 @@ func (h *taskHandle) handleStats(ch chan *drivers.TaskResourceUsage, ctx context
 }
 
 // Convert IIS WMI Tasks Info to driver TaskResourceUsage expected input
-func (h *taskHandle) getTaskResourceUsage(iisStats *wmiProcessStats) *drivers.TaskResourceUsage {
-	ts := time.Now().UTC().UnixNano()
-
-	totalPercent := h.totalCpuStats.Percent(float64(iisStats.KernelModeTime + iisStats.UserModeTime))
+func (h *taskHandle) getTaskResourceUsage(stats *wmiProcessStats) *drivers.TaskResourceUsage {
+	totalPercent := h.totalCpuStats.Percent(float64(stats.KernelModeTime + stats.UserModeTime))
 	cs := &drivers.CpuStats{
-		SystemMode: h.systemCpuStats.Percent(float64(iisStats.KernelModeTime)),
-		UserMode:   h.userCpuStats.Percent(float64(iisStats.UserModeTime)),
+		SystemMode: h.systemCpuStats.Percent(float64(stats.KernelModeTime)),
+		UserMode:   h.userCpuStats.Percent(float64(stats.UserModeTime)),
 		Percent:    totalPercent,
 		Measured:   []string{"Percent", "System Mode", "User Mode"},
 		TotalTicks: h.totalCpuStats.TicksConsumed(totalPercent),
 	}
 
 	ms := &drivers.MemoryStats{
-		RSS:      iisStats.WorkingSetPrivate,
+		RSS:      stats.WorkingSetPrivate,
 		Measured: []string{"RSS"},
 	}
 
-	resourceUsage := drivers.ResourceUsage{
-		MemoryStats: ms,
-		CpuStats:    cs,
-	}
+	ts := time.Now().UTC().UnixNano()
 	return &drivers.TaskResourceUsage{
-		ResourceUsage: &resourceUsage,
-		Timestamp:     ts,
+		ResourceUsage: &drivers.ResourceUsage{
+			CpuStats:    cs,
+			MemoryStats: ms,
+		},
+		Timestamp: ts,
 	}
 }
 

@@ -243,11 +243,15 @@ func applyAppPoolIdentity(appPoolName string, appPoolIdentity iisAppPoolIdentity
 
 // Applies a shutdown timeout in secs to ensure worker processes are terminated in a timely fashion
 func applyAppPoolShutdownTimeout(appPoolName string, timeout time.Duration) error {
-	timeoutStr := fmt.Sprintf("%02d:%02d:%02d", int32(math.Floor(timeout.Hours())), int32(math.Floor(timeout.Minutes())), int32(math.Floor(timeout.Seconds())))
+	hrs := math.Floor(timeout.Hours())
+	mins := math.Floor(timeout.Minutes())
+	secs := math.Floor(timeout.Seconds())
+
+	timeoutStr := fmt.Sprintf("%02d:%02d:%02d", int32(hrs), int32(mins), int32(secs))
+
 	if _, err := executeAppCmd("set", "config", "/section:applicationPools", fmt.Sprintf("/[name='%s'].processModel.shutdownTimeLimit:%s", appPoolName, timeoutStr)); err != nil {
 		return fmt.Errorf("Failed to set Application Pool shutdown timeout: %v", err)
 	}
-
 	return nil
 }
 
@@ -593,11 +597,7 @@ func createWebsite(websiteName string, config *TaskConfig) error {
 	if err := applySiteAppPool(websiteName, websiteName); err != nil {
 		return err
 	}
-	if err := applySiteBindings(websiteName, config.Bindings); err != nil {
-		return err
-	}
-
-	return nil
+	return applySiteBindings(websiteName, config.Bindings)
 }
 
 // Deletes an Application Pool and Site with the given name
@@ -605,10 +605,7 @@ func deleteWebsite(websiteName string) error {
 	if err := deleteSite(websiteName); err != nil {
 		return err
 	}
-	if err := deleteAppPool(websiteName); err != nil {
-		return err
-	}
-	return nil
+	return deleteAppPool(websiteName)
 }
 
 // Returns if both Application Pool and Site exist with the given name
@@ -737,11 +734,7 @@ func startWebsite(websiteName string) error {
 	if err := startAppPool(websiteName); err != nil {
 		return err
 	}
-	if err := startSite(websiteName); err != nil {
-		return err
-	}
-
-	return nil
+	return startSite(websiteName)
 }
 
 // Stops both Application Pool and Site with the given name
@@ -749,11 +742,7 @@ func stopWebsite(websiteName string) error {
 	if err := stopSite(websiteName); err != nil {
 		return err
 	}
-	if err := stopAppPool(websiteName); err != nil {
-		return err
-	}
-
-	return nil
+	return stopAppPool(websiteName)
 }
 
 func getNetshIP(ipAddress string) string {
