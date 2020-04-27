@@ -10,7 +10,7 @@ Stop-Service nomad
 Get-CimInstance win32_service -filter "name='nomad'" | Invoke-CimMethod -Name Change -Arguments @{StartName="LocalSystem"} | Out-Null
 $nomadDir = "C:\\ProgramData\\nomad"
 New-Item -ItemType Directory -Path "$nomadDir\\plugin" -Force
-Copy-Item "C:\\vagrant\\iis-driver.exe" -Destination "$nomadDir\\plugin" -Force
+Copy-Item "C:\\vagrant\\win_iis.exe" -Destination "$nomadDir\\plugin" -Force
 Copy-Item "C:\\vagrant\\vagrant\\win_client.hcl" -Destination "$nomadDir\\conf\\client.hcl" -Force
 Start-Service nomad
 

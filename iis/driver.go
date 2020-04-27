@@ -54,6 +54,7 @@ var (
 			hclspec.NewAttr("enabled", "bool", false),
 			hclspec.NewLiteral("true"),
 		),
+		"stats_interval": hclspec.NewAttr("stats_interval", "string", false),
 	})
 
 	// taskConfigSpec is the specification of the plugin's configuration for
@@ -94,7 +95,8 @@ var (
 // Config contains configuration information for the plugin
 type Config struct {
 	// Enabled is set to true to enable the win_iis driver
-	Enabled bool `codec:"enabled"`
+	Enabled       bool   `codec:"enabled"`
+	StatsInterval string `codec:"stats_interval"`
 }
 
 // TaskConfig contains configuration information for a task that runs with
@@ -441,6 +443,17 @@ func (d *Driver) TaskStats(ctx context.Context, taskID string, interval time.Dur
 	handle, ok := d.tasks.Get(taskID)
 	if !ok {
 		return nil, drivers.ErrTaskNotFound
+	}
+
+	if d.config.StatsInterval != "" {
+		statsInterval, err := time.ParseDuration(d.config.StatsInterval)
+		if err != nil {
+			d.logger.Warn("Error parsing driver stats interval, fallback on default interval")
+		} else {
+			msg := fmt.Sprintf("Overriding client stats interval: %v with driver stats interval: %v", interval, d.config.StatsInterval)
+			d.logger.Info(msg)
+			interval = statsInterval
+		}
 	}
 
 	return handle.Stats(ctx, interval)

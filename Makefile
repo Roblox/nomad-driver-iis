@@ -1,4 +1,4 @@
-PLUGIN_BINARY=iis-driver.exe
+PLUGIN_BINARY=win_iis.exe
 export GO111MODULE=on
 export GOOS=windows
 
