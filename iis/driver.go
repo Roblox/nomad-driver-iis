@@ -114,8 +114,7 @@ type TaskConfig struct {
 // This information is needed to rebuild the task state and handler during
 // recovery.
 type TaskState struct {
-	TaskConfig *drivers.TaskConfig
-	StartedAt  time.Time
+	StartedAt time.Time
 }
 
 // Driver is a driver for running windows IIS tasks.
@@ -290,12 +289,10 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	}
 
 	driverState := TaskState{
-		TaskConfig: cfg,
-		StartedAt:  h.startedAt,
+		StartedAt: h.startedAt,
 	}
 
 	if err := handle.SetDriverState(&driverState); err != nil {
-		d.logger.Error("failed to start task, error setting driver state", "error", err)
 		return nil, nil, fmt.Errorf("failed to set driver state: %v", err)
 	}
 
@@ -321,12 +318,12 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 	}
 
 	var driverConfig TaskConfig
-	if err := taskState.TaskConfig.DecodeDriverConfig(&driverConfig); err != nil {
+	if err := handle.Config.DecodeDriverConfig(&driverConfig); err != nil {
 		return fmt.Errorf("failed to decode driver config: %v", err)
 	}
 
 	h := &taskHandle{
-		taskConfig:     taskState.TaskConfig,
+		taskConfig:     handle.Config,
 		procState:      drivers.TaskStateRunning,
 		startedAt:      taskState.StartedAt,
 		exitResult:     &drivers.ExitResult{},
@@ -337,9 +334,10 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		websiteStarted: false,
 	}
 
-	d.tasks.Set(taskState.TaskConfig.ID, h)
+	d.tasks.Set(handle.Config.ID, h)
 
 	go h.run(&driverConfig)
+	d.logger.Info("win_iis task driver: Task recovered successfully.")
 	return nil
 }
 
