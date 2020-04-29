@@ -30,21 +30,12 @@ type taskHandle struct {
 	totalCpuStats  *stats.CpuStats
 	userCpuStats   *stats.CpuStats
 	systemCpuStats *stats.CpuStats
+	websiteStarted bool
 }
 
 func (h *taskHandle) TaskStatus() *drivers.TaskStatus {
 	h.stateLock.RLock()
 	defer h.stateLock.RUnlock()
-
-	isRunning, err := isWebsiteRunning(h.taskConfig.AllocID)
-	if err != nil {
-		h.logger.Error("Error in getting task status: %v", err)
-		h.procState = drivers.TaskStateExited
-	}
-
-	if !isRunning {
-		h.procState = drivers.TaskStateExited
-	}
 
 	return &drivers.TaskStatus{
 		ID:          h.taskConfig.ID,
@@ -128,6 +119,8 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 		h.handleError(errMsg, err)
 		return
 	}
+
+	h.websiteStarted = true
 }
 
 // handleError will log the error message (errMsg) and update the task handle with exit results.
@@ -157,46 +150,90 @@ func (h *taskHandle) handleStats(ch chan *drivers.TaskResourceUsage, ctx context
 			timer.Reset(interval)
 		}
 
-		t := time.Now()
-
 		// Get IIS Worker Process stats if we can.
 		stats, err := getWebsiteStats(h.taskConfig.AllocID)
 		if err != nil {
 			h.logger.Error("Failed to get iis worker process stats:", "error", err)
 			return
 		}
-		var cs drivers.CpuStats
-		var ms drivers.MemoryStats
-
-		total := stats.KernelModeTime + stats.UserModeTime
-		cs.SystemMode = h.systemCpuStats.Percent(float64(stats.KernelModeTime))
-		cs.UserMode = h.userCpuStats.Percent(float64(stats.UserModeTime))
-		cs.Percent = h.totalCpuStats.Percent(float64(total))
-		cs.TotalTicks = h.totalCpuStats.TicksConsumed(cs.Percent)
-		cs.Measured = []string{"Percent", "System Mode", "User Mode"}
-
-		ms.RSS = stats.WorkingSetPrivate
-		ms.Measured = []string{"RSS"}
-
-		taskResUsage := drivers.TaskResourceUsage{
-			ResourceUsage: &drivers.ResourceUsage{
-				CpuStats:    &cs,
-				MemoryStats: &ms,
-			},
-			Timestamp: t.UTC().UnixNano(),
-		}
 
 		select {
 		case <-ctx.Done():
 			return
-		case ch <- &taskResUsage:
+		case ch <- h.getTaskResourceUsage(stats):
 		}
 	}
 }
 
+// Convert IIS WMI Tasks Info to driver TaskResourceUsage expected input
+func (h *taskHandle) getTaskResourceUsage(stats *wmiProcessStats) *drivers.TaskResourceUsage {
+	totalPercent := h.totalCpuStats.Percent(float64(stats.KernelModeTime + stats.UserModeTime))
+	cs := &drivers.CpuStats{
+		SystemMode: h.systemCpuStats.Percent(float64(stats.KernelModeTime)),
+		UserMode:   h.userCpuStats.Percent(float64(stats.UserModeTime)),
+		Percent:    totalPercent,
+		Measured:   []string{"Percent", "System Mode", "User Mode"},
+		TotalTicks: h.totalCpuStats.TicksConsumed(totalPercent),
+	}
+
+	ms := &drivers.MemoryStats{
+		RSS:      stats.WorkingSetPrivate,
+		Measured: []string{"RSS"},
+	}
+
+	ts := time.Now().UTC().UnixNano()
+	return &drivers.TaskResourceUsage{
+		ResourceUsage: &drivers.ResourceUsage{
+			CpuStats:    cs,
+			MemoryStats: ms,
+		},
+		Timestamp: ts,
+	}
+}
+
 func (h *taskHandle) shutdown(timeout time.Duration) error {
-	// TODO: Perform iis stop with timeout period
-	return nil
+	h.stateLock.Lock()
+	defer h.stateLock.Unlock()
+
+	// Ensure IIS is up to date with timeout config before turning off
+	err := applyWebsiteShutdownTimeout(h.taskConfig.AllocID, timeout)
+	if err != nil {
+		return err
+	}
+
+	// Stops future traffic for website
+	// Existing connections will remain until timeout is hit
+	err = stopWebsite(h.taskConfig.AllocID)
+	if err != nil {
+		return err
+	}
+
+	// Wait for task to stop or timeout
+	c := make(chan error, 1)
+	defer close(c)
+
+	// Go func to listen for website running status.
+	// Writes to channel if website is stopped or if an error occurs
+	go func() {
+		for {
+			if isRunning, err := isWebsiteRunning(h.taskConfig.AllocID); err != nil || !isRunning {
+				c <- err
+			}
+		}
+	}()
+
+	// Either the website stops or timeout occurs.
+	// After either event, attempt to remove IIS Website.
+	select {
+	case err := <-c:
+		if err != nil {
+			h.logger.Error("error stopping website... force killing", "error", err)
+		}
+	case <-time.After(timeout):
+		h.logger.Error("website failed to stop in a timely manner... force killing", "error", err)
+	}
+
+	return h.cleanup()
 }
 
 func (h *taskHandle) cleanup() error {

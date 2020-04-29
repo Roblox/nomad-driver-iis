@@ -324,6 +324,10 @@ func TestWebsite(t *testing.T) {
 		t.Fatal("Website is not started!")
 	}
 
+	if err := applyWebsiteShutdownTimeout(guid, time.Second*15); err != nil {
+		t.Fatal(err)
+	}
+
 	// Stop the website
 	if err := stopWebsite(guid); err != nil {
 		t.Fatal(err)

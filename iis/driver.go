@@ -54,6 +54,7 @@ var (
 			hclspec.NewAttr("enabled", "bool", false),
 			hclspec.NewLiteral("true"),
 		),
+		"stats_interval": hclspec.NewAttr("stats_interval", "string", false),
 	})
 
 	// taskConfigSpec is the specification of the plugin's configuration for
@@ -73,7 +74,7 @@ var (
 			"hostname":      hclspec.NewAttr("hostname", "string", false),
 			"ipaddress":     hclspec.NewAttr("ipaddress", "string", false),
 			"resource_port": hclspec.NewAttr("resource_port", "string", false),
-			"port":          hclspec.NewAttr("port", "integer", false),
+			"port":          hclspec.NewAttr("port", "number", false),
 			"type":          hclspec.NewAttr("type", "string", false),
 			"cert_hash":     hclspec.NewAttr("cert_hash", "string", false),
 		})),
@@ -94,7 +95,8 @@ var (
 // Config contains configuration information for the plugin
 type Config struct {
 	// Enabled is set to true to enable the win_iis driver
-	Enabled bool `codec:"enabled"`
+	Enabled       bool   `codec:"enabled"`
+	StatsInterval string `codec:"stats_interval"`
 }
 
 // TaskConfig contains configuration information for a task that runs with
@@ -112,8 +114,7 @@ type TaskConfig struct {
 // This information is needed to rebuild the task state and handler during
 // recovery.
 type TaskState struct {
-	TaskConfig *drivers.TaskConfig
-	StartedAt  time.Time
+	StartedAt time.Time
 }
 
 // Driver is a driver for running windows IIS tasks.
@@ -284,15 +285,14 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		totalCpuStats:  stats.NewCpuStats(),
 		userCpuStats:   stats.NewCpuStats(),
 		systemCpuStats: stats.NewCpuStats(),
+		websiteStarted: false,
 	}
 
 	driverState := TaskState{
-		TaskConfig: cfg,
-		StartedAt:  h.startedAt,
+		StartedAt: h.startedAt,
 	}
 
 	if err := handle.SetDriverState(&driverState); err != nil {
-		d.logger.Error("failed to start task, error setting driver state", "error", err)
 		return nil, nil, fmt.Errorf("failed to set driver state: %v", err)
 	}
 
@@ -318,12 +318,12 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 	}
 
 	var driverConfig TaskConfig
-	if err := taskState.TaskConfig.DecodeDriverConfig(&driverConfig); err != nil {
+	if err := handle.Config.DecodeDriverConfig(&driverConfig); err != nil {
 		return fmt.Errorf("failed to decode driver config: %v", err)
 	}
 
 	h := &taskHandle{
-		taskConfig:     taskState.TaskConfig,
+		taskConfig:     handle.Config,
 		procState:      drivers.TaskStateRunning,
 		startedAt:      taskState.StartedAt,
 		exitResult:     &drivers.ExitResult{},
@@ -331,11 +331,13 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		totalCpuStats:  stats.NewCpuStats(),
 		userCpuStats:   stats.NewCpuStats(),
 		systemCpuStats: stats.NewCpuStats(),
+		websiteStarted: false,
 	}
 
-	d.tasks.Set(taskState.TaskConfig.ID, h)
+	d.tasks.Set(handle.Config.ID, h)
 
 	go h.run(&driverConfig)
+	d.logger.Info("win_iis task driver: Task recovered successfully.")
 	return nil
 }
 
@@ -355,16 +357,26 @@ func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *dr
 	defer close(ch)
 	var result *drivers.ExitResult
 
-	// TODO: implement driver specific logic to notify Nomad the task has been
-	// completed and what was the exit result.
-	//
-	// When a result is sent in the result channel Nomad will stop the task and
-	// emit an event that an operator can use to get an insight on why the task
-	// stopped.
-	//
-	// In the example below we block and wait until the executor finishes
-	// running, at which point we send the exit code and signal in the result
-	// channel.
+	// Blocker code to monitor current task running status.
+	// On IIS task not running, set driver exit result and return.
+	for {
+		if handle.websiteStarted {
+			isRunning, err := isWebsiteRunning(handle.taskConfig.AllocID)
+			if err != nil {
+				result = &drivers.ExitResult{
+					Err: fmt.Errorf("executor: error waiting on process: %v", err),
+				}
+				break
+			}
+			if !isRunning {
+				result = &drivers.ExitResult{
+					ExitCode: 0,
+				}
+				break
+			}
+		}
+		time.Sleep(time.Second * 5)
+	}
 
 	for {
 		select {
@@ -431,6 +443,17 @@ func (d *Driver) TaskStats(ctx context.Context, taskID string, interval time.Dur
 		return nil, drivers.ErrTaskNotFound
 	}
 
+	if d.config.StatsInterval != "" {
+		statsInterval, err := time.ParseDuration(d.config.StatsInterval)
+		if err != nil {
+			d.logger.Warn("Error parsing driver stats interval, fallback on default interval")
+		} else {
+			msg := fmt.Sprintf("Overriding client stats interval: %v with driver stats interval: %v", interval, d.config.StatsInterval)
+			d.logger.Info(msg)
+			interval = statsInterval
+		}
+	}
+
 	return handle.Stats(ctx, interval)
 }
 
@@ -441,7 +464,7 @@ func (d *Driver) TaskEvents(ctx context.Context) (<-chan *drivers.TaskEvent, err
 
 // SignalTask forwards a signal to a task.
 // This is an optional capability.
-// TODO: Loop back on signal viability for worker processes
+// IIS doesn't natively allow users to send signals, so this driver will abide by that.
 func (d *Driver) SignalTask(taskID string, signal string) error {
 	return fmt.Errorf("This driver does not support signals")
 }
@@ -449,6 +472,5 @@ func (d *Driver) SignalTask(taskID string, signal string) error {
 // ExecTask returns the result of executing the given command inside a task.
 // This is an optional capability.
 func (d *Driver) ExecTask(taskID string, cmd []string, timeout time.Duration) (*drivers.ExecTaskResult, error) {
-	// TODO: implement driver specific logic to execute commands in a task.
 	return nil, fmt.Errorf("This driver does not support exec")
 }
