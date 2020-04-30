@@ -41,7 +41,7 @@ Test your changes locally before contributing.
 The easiest way to test your changes is `make converge`.<br/>
 `make converge` will:
 
-1) Build the executable (iis-driver.exe)<br/>
+1) Build the executable (win_iis.exe)<br/>
 2) Spin up a vagrant VM (`vagrant up`) if it's not already running.<br/>
 3) Provision your changes into the VM (`vagrant provision`)<br/>
 
@@ -64,4 +64,4 @@ Cleanup
 ````
 make clean
 ````
-This will destroy your vagrant VM (along with all your changes) and remove the executable (iis-driver.exe).
+This will destroy your vagrant VM (along with all your changes) and remove the executable (win_iis.exe).
