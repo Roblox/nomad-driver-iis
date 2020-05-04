@@ -449,7 +449,7 @@ func (d *Driver) TaskStats(ctx context.Context, taskID string, interval time.Dur
 			d.logger.Warn("Error parsing driver stats interval, fallback on default interval")
 		} else {
 			msg := fmt.Sprintf("Overriding client stats interval: %v with driver stats interval: %v", interval, d.config.StatsInterval)
-			d.logger.Info(msg)
+			d.logger.Debug(msg)
 			interval = statsInterval
 		}
 	}

@@ -210,7 +210,6 @@ func (h *taskHandle) shutdown(timeout time.Duration) error {
 
 	// Wait for task to stop or timeout
 	c := make(chan error, 1)
-	defer close(c)
 
 	// Go func to listen for website running status.
 	// Writes to channel if website is stopped or if an error occurs
