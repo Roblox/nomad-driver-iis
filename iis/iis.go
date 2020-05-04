@@ -5,12 +5,10 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
-	"math"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	wmi "github.com/StackExchange/wmi"
 )
@@ -238,20 +236,6 @@ func applyAppPoolIdentity(appPoolName string, appPoolIdentity iisAppPoolIdentity
 		return fmt.Errorf("Failed to set Application Pool identity: %v", err)
 	}
 
-	return nil
-}
-
-// Applies a shutdown timeout in secs to ensure worker processes are terminated in a timely fashion
-func applyAppPoolShutdownTimeout(appPoolName string, timeout time.Duration) error {
-	hrs := math.Floor(timeout.Hours())
-	mins := math.Floor(timeout.Minutes())
-	secs := math.Floor(timeout.Seconds())
-
-	timeoutStr := fmt.Sprintf("%02d:%02d:%02d", int32(hrs), int32(mins), int32(secs))
-
-	if _, err := executeAppCmd("set", "config", "/section:applicationPools", fmt.Sprintf("/[name='%s'].processModel.shutdownTimeLimit:%s", appPoolName, timeoutStr)); err != nil {
-		return fmt.Errorf("Failed to set Application Pool shutdown timeout: %v", err)
-	}
 	return nil
 }
 
@@ -576,11 +560,6 @@ func applySiteAppPool(siteName string, appPoolName string) error {
 	}
 
 	return nil
-}
-
-// Applies shutdown timeouts where appropriate to the website
-func applyWebsiteShutdownTimeout(webSiteName string, timeout time.Duration) error {
-	return applyAppPoolShutdownTimeout(webSiteName, timeout)
 }
 
 // Creates an Application Pool and Site with the given configuration

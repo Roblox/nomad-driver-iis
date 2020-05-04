@@ -195,44 +195,7 @@ func (h *taskHandle) shutdown(timeout time.Duration) error {
 	h.stateLock.Lock()
 	defer h.stateLock.Unlock()
 
-	// Ensure IIS is up to date with timeout config before turning off
-	err := applyWebsiteShutdownTimeout(h.taskConfig.AllocID, timeout)
-	if err != nil {
-		return err
-	}
-
-	// Stops future traffic for website
-	// Existing connections will remain until timeout is hit
-	err = stopWebsite(h.taskConfig.AllocID)
-	if err != nil {
-		return err
-	}
-
-	// Wait for task to stop or timeout
-	c := make(chan error, 1)
-
-	// Go func to listen for website running status.
-	// Writes to channel if website is stopped or if an error occurs
-	go func() {
-		for {
-			if isRunning, err := isWebsiteRunning(h.taskConfig.AllocID); err != nil || !isRunning {
-				c <- err
-			}
-		}
-	}()
-
-	// Either the website stops or timeout occurs.
-	// After either event, attempt to remove IIS Website.
-	select {
-	case err := <-c:
-		if err != nil {
-			h.logger.Error("error stopping website... force killing", "error", err)
-		}
-	case <-time.After(timeout):
-		h.logger.Error("website failed to stop in a timely manner... force killing", "error", err)
-	}
-
-	return h.cleanup()
+	return stopWebsite(h.taskConfig.AllocID)
 }
 
 func (h *taskHandle) cleanup() error {
