@@ -25,5 +25,6 @@ advertise {
 plugin "win_iis" {
   config {
     enabled = true
+    stats_interval = "5s"
   }
 }
