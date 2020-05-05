@@ -195,7 +195,14 @@ func (h *taskHandle) shutdown(timeout time.Duration) error {
 	h.stateLock.Lock()
 	defer h.stateLock.Unlock()
 
-	return stopWebsite(h.taskConfig.AllocID)
+	if err := stopWebsite(h.taskConfig.AllocID); err != nil {
+		return err
+	}
+
+	// Sleep for timeout duration to allow stopWebsite to finish gracefully.
+	time.Sleep(timeout)
+
+	return nil
 }
 
 func (h *taskHandle) cleanup() error {
