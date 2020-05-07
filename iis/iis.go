@@ -9,9 +9,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	wmi "github.com/StackExchange/wmi"
 )
+
+var mux sync.Mutex
 
 // Application Pool schema given from appcmd.exe
 type appCmdAppPool struct {
@@ -564,6 +567,9 @@ func applySiteAppPool(siteName string, appPoolName string) error {
 
 // Creates an Application Pool and Site with the given configuration
 func createWebsite(websiteName string, config *TaskConfig) error {
+	mux.Lock()
+	defer mux.Unlock()
+
 	if err := createAppPool(websiteName, config.AppPoolConfigPath); err != nil {
 		return err
 	}
