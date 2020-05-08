@@ -252,7 +252,7 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 	// Get IIS version
 	version, err := getVersion()
 	if err != nil {
-		d.logger.Warn("Error in building fingerprint: failed to find IIS version: %v", err)
+		d.logger.Error("Error in building fingerprint: failed to find IIS version: %v", err)
 		return fp
 	}
 
