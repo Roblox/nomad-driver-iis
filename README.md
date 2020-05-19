@@ -65,3 +65,10 @@ Cleanup
 make clean
 ````
 This will destroy your vagrant VM (along with all your changes) and remove the executable (win_iis.exe).
+
+License
+-------------------
+
+Copyright 2020 Roblox Corporation
+
+Licensed under the Apache License, Version 2.0 (the "License"). For more information read the [License](LICENSE).
