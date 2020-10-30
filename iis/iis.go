@@ -110,8 +110,8 @@ type appCmdWP struct {
 // IIS Identity used for an Application Pool
 type iisAppPoolIdentity struct {
 	Identity string `codec:"identity"`
-	Password string `codec:"username"`
-	Username string `codec:"password"`
+	Password string `codec:"password"`
+	Username string `codec:"username"`
 }
 
 // IIS Binding struct to match
