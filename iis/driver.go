@@ -40,7 +40,7 @@ const (
 
 	// pluginVersion allows the client to identify and use newer versions of
 	// an installed plugin
-	pluginVersion = "v0.1.1"
+	pluginVersion = "v0.1.2"
 
 	// fingerprintPeriod is the interval at which the plugin will send
 	// fingerprint responses
@@ -290,7 +290,11 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		return nil, nil, fmt.Errorf("failed to decode driver config: %v", err)
 	}
 
-	d.logger.Info("starting iis task", "driver_cfg", hclog.Fmt("%+v", driverConfig))
+	var driverConfigRedacted TaskConfig
+	driverConfigRedacted = driverConfig
+	driverConfigRedacted.AppPoolIdentity.Password = "REDACTED"
+
+	d.logger.Info("starting iis task", "driver_cfg", hclog.Fmt("%+v", driverConfigRedacted))
 	handle := drivers.NewTaskHandle(taskHandleVersion)
 	handle.Config = cfg
 
