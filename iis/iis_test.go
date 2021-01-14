@@ -290,6 +290,10 @@ func TestWebsite(t *testing.T) {
 			{Type: "http", Port: 8080},
 			{Type: "https", Port: 8081, CertHash: hash},
 		},
+		AppPoolResources: iisResourceLimit{
+			CPULimit:    50,
+			MemoryLimit: 500,
+		},
 		AppPoolConfigPath: "C:\\vagrant\\vagrant\\testapppool.xml",
 		SiteConfigPath:    "C:\\vagrant\\vagrant\\testsite.xml",
 	}

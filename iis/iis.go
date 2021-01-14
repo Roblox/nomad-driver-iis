@@ -114,6 +114,12 @@ type iisAppPoolIdentity struct {
 	Username string `codec:"username"`
 }
 
+// IIS ResourceLimit used for Application pool worker process
+type iisResourceLimit struct {
+	CPULimit    int `codec:"cpu_limit"`
+	MemoryLimit int `codec:"memory_limit"`
+}
+
 // IIS Binding struct to match
 type iisBinding struct {
 	CertHash     string `codec:"cert_hash"`
@@ -256,6 +262,42 @@ func applyAppPoolIdentity(appPoolName string, appPoolIdentity iisAppPoolIdentity
 		return fmt.Errorf("Failed to set Application Pool identity: %v", err)
 	}
 
+	return nil
+}
+
+// Applies the Application Pool resource limit
+func applyAppPoolResourceLimit(appPoolName string, appPoolResource iisResourceLimit) error {
+	properties := []string{"set", "config", "-section:system.applicationHost/applicationPools"}
+
+	if appPoolResource.CPULimit != 0 {
+
+		cpuLimitSize := appPoolResource.CPULimit * 1000
+
+		properties = append(properties, fmt.Sprintf("/[name='%s'].cpu.limit:%s", appPoolName, strconv.Itoa(cpuLimitSize)))
+		properties = append(properties, fmt.Sprintf("/commit:apphost"))
+
+		if _, err := executeAppCmd(properties...); err != nil {
+			return fmt.Errorf("Failed to set Application Pool Resources: %v", err)
+		}
+	}
+	properties = []string{"set", "config", "-section:system.applicationHost/applicationPools"}
+
+	properties = append(properties, fmt.Sprintf("/[name='%s'].cpu.action:%s", appPoolName, "KillW3wp"))
+	properties = append(properties, fmt.Sprintf("/commit:apphost"))
+	if _, err := executeAppCmd(properties...); err != nil {
+		return fmt.Errorf("Failed to set Application Pool Resources: %v", err)
+	}
+
+	properties = []string{"set", "config", "-section:system.applicationHost/applicationPools"}
+
+	if appPoolResource.MemoryLimit != 0 {
+		memoryLimitSize := appPoolResource.MemoryLimit * 1000
+		properties = append(properties, fmt.Sprintf("/[name='%s'].recycling.periodicRestart.privateMemory:%s", appPoolName, strconv.Itoa(memoryLimitSize)))
+		properties = append(properties, fmt.Sprintf("/commit:apphost"))
+		if _, err := executeAppCmd(properties...); err != nil {
+			return fmt.Errorf("Failed to set Application Pool Resources: %v", err)
+		}
+	}
 	return nil
 }
 
@@ -591,6 +633,9 @@ func createWebsite(websiteName string, config *TaskConfig) error {
 		return err
 	}
 	if err := applyAppPoolIdentity(websiteName, config.AppPoolIdentity); err != nil {
+		return err
+	}
+	if err := applyAppPoolResourceLimit(websiteName, config.AppPoolResources); err != nil {
 		return err
 	}
 	if err := createSite(websiteName, config.Path, config.SiteConfigPath); err != nil {

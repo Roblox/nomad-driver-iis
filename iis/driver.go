@@ -87,6 +87,10 @@ var (
 			"username": hclspec.NewAttr("username", "string", false),
 			"password": hclspec.NewAttr("password", "string", false),
 		})),
+		"resource_limit": hclspec.NewBlock("resource_limit", false, hclspec.NewObject(map[string]*hclspec.Spec{
+			"cpu_limit":    hclspec.NewAttr("cpu_limit", "number", true),
+			"memory_limit": hclspec.NewAttr("memory_limit", "number", true),
+		})),
 		"bindings": hclspec.NewBlockList("bindings", hclspec.NewObject(map[string]*hclspec.Spec{
 			"hostname":      hclspec.NewAttr("hostname", "string", false),
 			"ipaddress":     hclspec.NewAttr("ipaddress", "string", false),
@@ -123,6 +127,7 @@ type TaskConfig struct {
 	AppPoolConfigPath string             `codec:"apppool_config_path"`
 	SiteConfigPath    string             `codec:"site_config_path"`
 	AppPoolIdentity   iisAppPoolIdentity `codec:"apppool_identity"`
+	AppPoolResources  iisResourceLimit   `codec:"resource_limit"`
 	Bindings          []iisBinding       `codec:"bindings"`
 }
 
