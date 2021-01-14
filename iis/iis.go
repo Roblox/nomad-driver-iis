@@ -33,6 +33,16 @@ import (
 
 var mux sync.Mutex
 
+type WebsiteConfig struct {
+	AppPoolIdentity   iisAppPoolIdentity
+	AppPoolConfigPath string
+	Bindings          []iisBinding
+	Env               map[string]string
+	Name              string
+	Path              string
+	SiteConfigPath    string
+}
+
 // Application Pool schema given from appcmd.exe
 type appCmdAppPool struct {
 	Name           string     `xml:"APPPOOL.NAME,attr"`
@@ -44,10 +54,22 @@ type appCmdAppPool struct {
 
 // An Application Pool's inner schema to describe the ApplicationPool given from appcmd.exe
 type appPoolAdd struct {
-	Name         string              `xml:"name,attr"`
-	QueueLength  int                 `xml:"queueLength,attr"`
-	AutoStart    bool                `xml:"autoStart,attr"`
-	ProcessModel appPoolProcessModel `xml:"processModel"`
+	Name                 string              `xml:"name,attr"`
+	QueueLength          int                 `xml:"queueLength,attr"`
+	AutoStart            bool                `xml:"autoStart,attr"`
+	ProcessModel         appPoolProcessModel `xml:"processModel"`
+	EnvironmentVariables appPoolEnvVars      `xml:"environmentVariables"`
+}
+
+// An Application Pool's 'add' schema for Environment Variables
+type appPoolAddEnvVar struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
+}
+
+// An Application Pool's inner schema for Environment Variables. We only care about 'add' vars.
+type appPoolEnvVars struct {
+	Add []appPoolAddEnvVar `xml:"add"`
 }
 
 // An Application Pool's ProcessModel schema given from appcmd.exe
@@ -109,9 +131,9 @@ type appCmdWP struct {
 
 // IIS Identity used for an Application Pool
 type iisAppPoolIdentity struct {
-	Identity string `codec:"identity"`
-	Password string `codec:"password"`
-	Username string `codec:"username"`
+	Identity string
+	Password string
+	Username string
 }
 
 // IIS Binding struct to match
@@ -131,8 +153,16 @@ type wmiProcessStats struct {
 	WorkingSetPrivate uint64
 }
 
-// Gets the exe version of InetMgr.exe
-func getVersion() (string, error) {
+// A Version Struct to parse IIS Version strings for granular control with features.
+type iisVersion struct {
+	Major    int
+	Minor    int
+	Build    int
+	Revision int
+}
+
+// Gets the exe version string of InetMgr.exe
+func getVersionStr() (string, error) {
 	cmd := exec.Command("cmd", "/C", `wmic datafile where name='C:\\Windows\\System32\\inetsrv\\InetMgr.exe' get version`)
 	if out, err := cmd.Output(); err != nil {
 		return "", fmt.Errorf("Failed to determine version: %v", err)
@@ -142,6 +172,44 @@ func getVersion() (string, error) {
 		} else {
 			return output[1], nil
 		}
+	}
+}
+
+// Gets a version object of InetMgr.exe which parses major.minor.build.revision string
+func getVersion() (*iisVersion, error) {
+	if versionStr, err := getVersionStr(); err != nil {
+		return nil, fmt.Errorf("Failed to get version string for iisVersion parsing: %v", err)
+	} else {
+		versionNumbers := strings.Split(versionStr, ".")
+		if len(versionNumbers) != 4 {
+			return nil, fmt.Errorf("Format of IIS version is improper. It must have \"major.minor.build.revision\" format")
+		}
+		version := &iisVersion{}
+		if major, err := strconv.Atoi(versionNumbers[0]); err != nil {
+			return nil, fmt.Errorf("Failed to set Major version number: %v", err)
+		} else {
+			version.Major = major
+		}
+
+		if minor, err := strconv.Atoi(versionNumbers[1]); err != nil {
+			return nil, fmt.Errorf("Failed to set Minor version number: %v", err)
+		} else {
+			version.Minor = minor
+		}
+
+		if build, err := strconv.Atoi(versionNumbers[2]); err != nil {
+			return nil, fmt.Errorf("Failed to set Build version number: %v", err)
+		} else {
+			version.Build = build
+		}
+
+		if revision, err := strconv.Atoi(versionNumbers[3]); err != nil {
+			return nil, fmt.Errorf("Failed to set Revision version number: %v", err)
+		} else {
+			version.Revision = revision
+		}
+
+		return version, nil
 	}
 }
 
@@ -259,6 +327,50 @@ func applyAppPoolIdentity(appPoolName string, appPoolIdentity iisAppPoolIdentity
 	return nil
 }
 
+// Creates environment variable xml nodes for IIS to ingest for each Application Pool for IIS 10+
+// Note: AppCmd will not let you set an environment variable when a key with the same name exists.
+//       To get around this, we will remove any changed env vars that already exist within the application pool and re-add.
+func applyAppPoolEnvVars(appPoolName string, envVars map[string]string) error {
+	if len(envVars) == 0 {
+		return nil
+	}
+
+	if iisVersion, err := getVersion(); err != nil {
+		return err
+	} else if iisVersion.Major < 10 {
+		// Default behavior for older versions of IIS does not accept env vars
+		return nil
+	}
+
+	appPool, err := getAppPool(appPoolName, true)
+	if err != nil || appPool == nil {
+		return err
+	}
+
+	properties := []string{"set", "config", "-section:system.applicationHost/applicationPools"}
+
+	for key, val := range envVars {
+		if keyExists, isSameValue := doesAppPoolEnvVarExistWithSameValue(appPool, key, val); keyExists {
+			// Delete altered env vars so that they can updated for the Application Pool
+			if isSameValue {
+				continue
+			} else {
+				if err = deleteAppPoolEnvVar(appPoolName, key); err != nil {
+					return fmt.Errorf("Failed to remove old environment variable entry from the Application Pool: %v", err)
+				}
+			}
+		}
+		properties = append(properties, fmt.Sprintf("/+[name='%s'].environmentVariables.[name='%s',value='%s']", appPoolName, key, val))
+	}
+
+	properties = append(properties, "/commit:appHost")
+	if _, err := executeAppCmd(properties...); err != nil {
+		return fmt.Errorf("Failed to set Application Pool environment variables: %v", err)
+	}
+
+	return nil
+}
+
 // Creates an Application Pool with the given name and applies an IIS exported Application Pool xml if a path is provided
 func createAppPool(appPoolName string, configPath string) error {
 	if exists, err := doesAppPoolExist(appPoolName); err != nil || exists {
@@ -286,12 +398,44 @@ func deleteAppPool(appPoolName string) error {
 	return nil
 }
 
+// Deletes an environment variable based on a key for a given Application Pool
+func deleteAppPoolEnvVar(appPoolName string, key string) error {
+	if exists, err := doesAppPoolExist(appPoolName); err != nil || !exists {
+		return err
+	}
+
+	properties := []string{"set", "config", "-section:system.applicationHost/applicationPools"}
+	properties = append(properties, fmt.Sprintf("/-[name='%s'].environmentVariables.[name='%s']", appPoolName, key))
+	properties = append(properties, "/commit:appHost")
+
+	if _, err := executeAppCmd(properties...); err != nil {
+		return fmt.Errorf("Failed to delete Application Pool environment variable: %v", err)
+	}
+
+	return nil
+}
+
 // Returns if an Application Pool with the given name exists in IIS
 func doesAppPoolExist(appPoolName string) (bool, error) {
 	if appPool, err := getAppPool(appPoolName, false); err != nil || appPool == nil {
 		return false, err
 	}
 	return true, nil
+}
+
+// Determines if an environment variable exists and if the values match for an Application Pool
+func doesAppPoolEnvVarExistWithSameValue(appPool *appCmdAppPool, key string, val string) (bool, bool) {
+	if appPool == nil {
+		return false, false
+	}
+
+	for _, envVar := range appPool.Add.EnvironmentVariables.Add {
+		if envVar.Name == key {
+			return true, envVar.Value == val
+		}
+	}
+
+	return false, false
 }
 
 // Returns an Application Pool with the given name
@@ -583,23 +727,26 @@ func applySiteAppPool(siteName string, appPoolName string) error {
 }
 
 // Creates an Application Pool and Site with the given configuration
-func createWebsite(websiteName string, config *TaskConfig) error {
+func createWebsite(websiteConfig *WebsiteConfig) error {
 	mux.Lock()
 	defer mux.Unlock()
 
-	if err := createAppPool(websiteName, config.AppPoolConfigPath); err != nil {
+	if err := createAppPool(websiteConfig.Name, websiteConfig.AppPoolConfigPath); err != nil {
 		return err
 	}
-	if err := applyAppPoolIdentity(websiteName, config.AppPoolIdentity); err != nil {
+	if err := applyAppPoolIdentity(websiteConfig.Name, websiteConfig.AppPoolIdentity); err != nil {
 		return err
 	}
-	if err := createSite(websiteName, config.Path, config.SiteConfigPath); err != nil {
+	if err := applyAppPoolEnvVars(websiteConfig.Name, websiteConfig.Env); err != nil {
 		return err
 	}
-	if err := applySiteAppPool(websiteName, websiteName); err != nil {
+	if err := createSite(websiteConfig.Name, websiteConfig.Path, websiteConfig.SiteConfigPath); err != nil {
 		return err
 	}
-	return applySiteBindings(websiteName, config.Bindings)
+	if err := applySiteAppPool(websiteConfig.Name, websiteConfig.Name); err != nil {
+		return err
+	}
+	return applySiteBindings(websiteConfig.Name, websiteConfig.Bindings)
 }
 
 // Deletes an Application Pool and Site with the given name

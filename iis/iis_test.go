@@ -36,7 +36,7 @@ const (
 
 // Test the fingerprinting ability of getVersion to ensure it is outputing the proper version format of IIS
 func TestIISVersion(t *testing.T) {
-	version, err := getVersion()
+	version, err := getVersionStr()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,29 +278,35 @@ func TestWebsite(t *testing.T) {
 		t.Fatal("Error purging: ", err)
 	}
 
-	// Basic config to be used for creating a website
-	config := &TaskConfig{
+	websiteConfig := &WebsiteConfig{
+		Name: guid,
 		Path: "C:\\inetpub\\wwwroot",
+		Bindings: []iisBinding{
+			{Type: "http", Port: 8080},
+			{Type: "https", Port: 8081, CertHash: hash},
+		},
+		Env: map[string]string{
+			"EXAMPLE_ENV_VAR":     "test123",
+			"EXAMPLE_ENV_VAR_ALT": "test123",
+		},
 		AppPoolIdentity: iisAppPoolIdentity{
 			Identity: "SpecificUser",
 			Username: "vagrant",
 			Password: "vagrant",
-		},
-		Bindings: []iisBinding{
-			{Type: "http", Port: 8080},
-			{Type: "https", Port: 8081, CertHash: hash},
 		},
 		AppPoolConfigPath: "C:\\vagrant\\vagrant\\testapppool.xml",
 		SiteConfigPath:    "C:\\vagrant\\vagrant\\testsite.xml",
 	}
 
 	// Create a website with the config and website name
-	if err := createWebsite(guid, config); err != nil {
+	if err := createWebsite(websiteConfig); err != nil {
 		t.Fatal(err)
 	}
 
+	websiteConfig.Env["EXAMPLE_ENV_VAR_ALT"] = "test789"
+
 	// Ensure create website is idempotent
-	if err := createWebsite(guid, config); err != nil {
+	if err := createWebsite(websiteConfig); err != nil {
 		t.Fatal(err)
 	}
 
@@ -308,20 +314,32 @@ func TestWebsite(t *testing.T) {
 	if appPool, err := getAppPool(guid, true); err != nil {
 		t.Fatal("Failed to get Site info!")
 	} else {
-		assert.Equal(config.AppPoolIdentity.Identity, appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
-		assert.Equal(config.AppPoolIdentity.Username, appPool.Add.ProcessModel.Username, "AppPool Identity Username doesn't match!")
-		assert.Equal(config.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
+		assert.Equal(websiteConfig.AppPoolIdentity.Identity, appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
+		assert.Equal(websiteConfig.AppPoolIdentity.Username, appPool.Add.ProcessModel.Username, "AppPool Identity Username doesn't match!")
+		assert.Equal(websiteConfig.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
 
 		// These values are supplied by the config.xml that is imported in from vagrant/testapppool.xml and vagrant/testsite.xml
 		assert.Equal("", appPool.RuntimeVersion, "AppPool RuntimeVersion doesn't match!")
 		assert.Equal("Integrated", appPool.PipelineMode, "AppPool PipelineMode doesn't match!")
+
+		// Verify env vars are properly set for both altered and non-altered env vars for IIS 10+
+		if iisVersion, err := getVersion(); err != nil {
+			t.Fatal(err)
+		} else if iisVersion.Major >= 10 {
+			expectedAppPoolEnvVars := []appPoolAddEnvVar{
+				{Name: "EXAMPLE_ENV_VAR", Value: "test123"},
+				{Name: "EXAMPLE_ENV_VAR_ALT", Value: "test789"},
+			}
+
+			assert.ElementsMatch(expectedAppPoolEnvVars, appPool.Add.EnvironmentVariables.Add, "AppPool EnvironmentVariables don't match!")
+		}
 	}
 
 	// Verify that site settings match the given config
 	if site, err := getSite(guid, true); err != nil {
 		t.Fatal("Failed to get Site info!")
 	} else {
-		assert.Equal(site.Site.Application.VDirs[0].PhysicalPath, config.Path, "Website path doesn't match desired path from config!")
+		assert.Equal(site.Site.Application.VDirs[0].PhysicalPath, websiteConfig.Path, "Website path doesn't match desired path from config!")
 	}
 
 	// Start the website

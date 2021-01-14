@@ -2,11 +2,17 @@ PLUGIN_BINARY=win_iis.exe
 export GO111MODULE=on
 export GOOS=windows
 
+ifeq ($(OS),Windows_NT)
+	RMCMD = del /f 
+else
+	RMCMD = rm -rf
+endif
+
 default: build
 
 .PHONY: clean
 clean:
-	rm -rf ${PLUGIN_BINARY}
+	${RMCMD} ${PLUGIN_BINARY}
 	vagrant destroy -f
 
 build:

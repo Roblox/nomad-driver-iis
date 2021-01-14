@@ -20,6 +20,7 @@ require (
 	github.com/docker/docker-credential-helpers v0.6.3 // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
+	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/fsouza/go-dockerclient v1.6.0 // indirect
 	github.com/hashicorp/consul v1.6.2 // indirect
 	github.com/hashicorp/consul-template v0.23.0
@@ -30,19 +31,23 @@ require (
 	github.com/hashicorp/hcl2 v0.0.0-20191002203319-fb75b3253c80 // indirect
 	github.com/hashicorp/nomad v0.10.1
 	github.com/hashicorp/nomad/api v0.0.0-20191203164002-b31573ae7206 // indirect
+	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/mitchellh/go-ps v0.0.0-20190716172923-621e5597135b // indirect
 	github.com/moby/moby v1.13.1 // indirect
 	github.com/mrunalp/fileutils v0.0.0-20171103030105-7d4729fb3618 // indirect
 	github.com/opencontainers/runc v1.0.0-rc8.0.20190611121236-6cc515888830 // indirect
 	github.com/opencontainers/selinux v1.3.1 // indirect
+	github.com/rs/cors v1.7.0 // indirect
 	github.com/seccomp/libseccomp-golang v0.9.1 // indirect
 	github.com/shirou/gopsutil v2.19.11+incompatible // indirect
+	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
 	github.com/stretchr/testify v1.3.0
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
 	github.com/ugorji/go v1.1.7 // indirect
 	github.com/vbatts/tar-split v0.11.1 // indirect
 	github.com/zclconf/go-cty v1.1.1 // indirect
 	go4.org v0.0.0-20191010144846-132d2879e1e9 // indirect
+	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637 // indirect
 )
 
 // use lower-case sirupsen
