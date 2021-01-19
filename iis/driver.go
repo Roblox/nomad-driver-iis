@@ -82,7 +82,7 @@ var (
 		"path":                hclspec.NewAttr("path", "string", true),
 		"site_config_path":    hclspec.NewAttr("site_config_path", "string", false),
 		"apppool_config_path": hclspec.NewAttr("apppool_config_path", "string", false),
-		"apppool_identity":    hclspec.NewAttr("apppool_config_path", "string", false),
+		"apppool_identity":    hclspec.NewAttr("apppool_identity", "string", false),
 		"bindings": hclspec.NewBlockList("bindings", hclspec.NewObject(map[string]*hclspec.Spec{
 			"hostname":      hclspec.NewAttr("hostname", "string", false),
 			"ipaddress":     hclspec.NewAttr("ipaddress", "string", false),

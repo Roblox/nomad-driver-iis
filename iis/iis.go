@@ -177,40 +177,42 @@ func getVersionStr() (string, error) {
 
 // Gets a version object of InetMgr.exe which parses major.minor.build.revision string
 func getVersion() (*iisVersion, error) {
-	if versionStr, err := getVersionStr(); err != nil {
+	versionStr, err := getVersionStr()
+
+	if err != nil {
 		return nil, fmt.Errorf("Failed to get version string for iisVersion parsing: %v", err)
-	} else {
-		versionNumbers := strings.Split(versionStr, ".")
-		if len(versionNumbers) != 4 {
-			return nil, fmt.Errorf("Format of IIS version is improper. It must have \"major.minor.build.revision\" format")
-		}
-		version := &iisVersion{}
-		if major, err := strconv.Atoi(versionNumbers[0]); err != nil {
-			return nil, fmt.Errorf("Failed to set Major version number: %v", err)
-		} else {
-			version.Major = major
-		}
-
-		if minor, err := strconv.Atoi(versionNumbers[1]); err != nil {
-			return nil, fmt.Errorf("Failed to set Minor version number: %v", err)
-		} else {
-			version.Minor = minor
-		}
-
-		if build, err := strconv.Atoi(versionNumbers[2]); err != nil {
-			return nil, fmt.Errorf("Failed to set Build version number: %v", err)
-		} else {
-			version.Build = build
-		}
-
-		if revision, err := strconv.Atoi(versionNumbers[3]); err != nil {
-			return nil, fmt.Errorf("Failed to set Revision version number: %v", err)
-		} else {
-			version.Revision = revision
-		}
-
-		return version, nil
 	}
+
+	versionNumbers := strings.Split(versionStr, ".")
+	if len(versionNumbers) != 4 {
+		return nil, fmt.Errorf("Format of IIS version is improper. It must have \"major.minor.build.revision\" format")
+	}
+	version := &iisVersion{}
+	if major, err := strconv.Atoi(versionNumbers[0]); err != nil {
+		return nil, fmt.Errorf("Failed to set Major version number: %v", err)
+	} else {
+		version.Major = major
+	}
+
+	if minor, err := strconv.Atoi(versionNumbers[1]); err != nil {
+		return nil, fmt.Errorf("Failed to set Minor version number: %v", err)
+	} else {
+		version.Minor = minor
+	}
+
+	if build, err := strconv.Atoi(versionNumbers[2]); err != nil {
+		return nil, fmt.Errorf("Failed to set Build version number: %v", err)
+	} else {
+		version.Build = build
+	}
+
+	if revision, err := strconv.Atoi(versionNumbers[3]); err != nil {
+		return nil, fmt.Errorf("Failed to set Revision version number: %v", err)
+	} else {
+		version.Revision = revision
+	}
+
+	return version, nil
 }
 
 // Returns if the IIS service is running in Windows Service Controller (SC)

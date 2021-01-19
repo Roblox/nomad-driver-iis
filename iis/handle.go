@@ -93,10 +93,8 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 		case "NOMAD_APPPOOL_USERNAME":
 			websiteConfig.AppPoolIdentity.Identity = "SpecificUser"
 			websiteConfig.AppPoolIdentity.Username = val
-			break
 		case "NOMAD_APPPOOL_PASSWORD":
 			websiteConfig.AppPoolIdentity.Password = val
-			break
 		default:
 			websiteConfig.Env[key] = val
 		}

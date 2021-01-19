@@ -5,7 +5,7 @@ export GOOS=windows
 ifeq ($(OS),Windows_NT)
 	RMCMD = del /f 
 else
-	RMCMD = rm -rf
+	RMCMD = rm -f
 endif
 
 default: build
