@@ -40,7 +40,7 @@ const (
 
 	// pluginVersion allows the client to identify and use newer versions of
 	// an installed plugin
-	pluginVersion = "v0.1.2"
+	pluginVersion = "v0.2.0"
 
 	// fingerprintPeriod is the interval at which the plugin will send
 	// fingerprint responses
@@ -82,17 +82,13 @@ var (
 		"path":                hclspec.NewAttr("path", "string", true),
 		"site_config_path":    hclspec.NewAttr("site_config_path", "string", false),
 		"apppool_config_path": hclspec.NewAttr("apppool_config_path", "string", false),
-		"apppool_identity": hclspec.NewBlock("apppool_identity", false, hclspec.NewObject(map[string]*hclspec.Spec{
-			"identity": hclspec.NewAttr("identity", "string", true),
-			"username": hclspec.NewAttr("username", "string", false),
-			"password": hclspec.NewAttr("password", "string", false),
-		})),
+		"apppool_identity":    hclspec.NewAttr("apppool_identity", "string", false),
 		"bindings": hclspec.NewBlockList("bindings", hclspec.NewObject(map[string]*hclspec.Spec{
 			"hostname":      hclspec.NewAttr("hostname", "string", false),
 			"ipaddress":     hclspec.NewAttr("ipaddress", "string", false),
 			"resource_port": hclspec.NewAttr("resource_port", "string", false),
 			"port":          hclspec.NewAttr("port", "number", false),
-			"type":          hclspec.NewAttr("type", "string", false),
+			"type":          hclspec.NewAttr("type", "string", true),
 			"cert_hash":     hclspec.NewAttr("cert_hash", "string", false),
 		})),
 	})
@@ -119,11 +115,11 @@ type Config struct {
 // TaskConfig contains configuration information for a task that runs with
 // this plugin
 type TaskConfig struct {
-	Path              string             `codec:"path"`
-	AppPoolConfigPath string             `codec:"apppool_config_path"`
-	SiteConfigPath    string             `codec:"site_config_path"`
-	AppPoolIdentity   iisAppPoolIdentity `codec:"apppool_identity"`
-	Bindings          []iisBinding       `codec:"bindings"`
+	Path              string       `codec:"path"`
+	AppPoolConfigPath string       `codec:"apppool_config_path"`
+	SiteConfigPath    string       `codec:"site_config_path"`
+	AppPoolIdentity   string       `codec:"apppool_identity"`
+	Bindings          []iisBinding `codec:"bindings"`
 }
 
 // TaskState is the runtime state which is encoded in the handle returned to
@@ -267,7 +263,7 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 	}
 
 	// Get IIS version
-	version, err := getVersion()
+	version, err := getVersionStr()
 	if err != nil {
 		d.logger.Warn("Error in building fingerprint: failed to find IIS version: %v", err)
 		return fp
@@ -290,11 +286,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		return nil, nil, fmt.Errorf("failed to decode driver config: %v", err)
 	}
 
-	var driverConfigRedacted TaskConfig
-	driverConfigRedacted = driverConfig
-	driverConfigRedacted.AppPoolIdentity.Password = "REDACTED"
-
-	d.logger.Info("starting iis task", "driver_cfg", hclog.Fmt("%+v", driverConfigRedacted))
+	d.logger.Info("starting iis task", "driver_cfg", hclog.Fmt("%+v", driverConfig))
 	handle := drivers.NewTaskHandle(taskHandleVersion)
 	handle.Config = cfg
 

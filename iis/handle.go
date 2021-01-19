@@ -76,8 +76,32 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 		h.logger.Error("unable to initialize stats", "error", err)
 	}
 
+	websiteConfig := WebsiteConfig{
+		Name: h.taskConfig.AllocID,
+		Env:  map[string]string{},
+		AppPoolIdentity: iisAppPoolIdentity{
+			Identity: driverConfig.AppPoolIdentity,
+		},
+		AppPoolConfigPath: driverConfig.AppPoolConfigPath,
+		SiteConfigPath:    driverConfig.SiteConfigPath,
+	}
+
+	// Setup environment variables.
+	// NOMAD_APPPOOL_* are keywords for applying user/pass info for a given Application Pool in a secure manner
+	for key, val := range h.taskConfig.Env {
+		switch key {
+		case "NOMAD_APPPOOL_USERNAME":
+			websiteConfig.AppPoolIdentity.Identity = "SpecificUser"
+			websiteConfig.AppPoolIdentity.Username = val
+		case "NOMAD_APPPOOL_PASSWORD":
+			websiteConfig.AppPoolIdentity.Password = val
+		default:
+			websiteConfig.Env[key] = val
+		}
+	}
+
 	if !filepath.IsAbs(driverConfig.Path) {
-		driverConfig.Path = filepath.Join(h.taskConfig.TaskDir().Dir, driverConfig.Path)
+		websiteConfig.Path = filepath.Join(h.taskConfig.TaskDir().Dir, driverConfig.Path)
 	}
 
 	// Gather Network Ports: http or https only
@@ -123,15 +147,15 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 		}
 	}
 
-	driverConfig.Bindings = iisBindings
+	websiteConfig.Bindings = iisBindings
 
-	if err := createWebsite(h.taskConfig.AllocID, driverConfig); err != nil {
+	if err := createWebsite(&websiteConfig); err != nil {
 		errMsg := fmt.Sprintf("Error in creating website: %v", err)
 		h.handleError(errMsg, err)
 		return
 	}
 
-	if err := startWebsite(h.taskConfig.AllocID); err != nil {
+	if err := startWebsite(websiteConfig.Name); err != nil {
 		errMsg := fmt.Sprintf("Error in starting website: %v", err)
 		h.handleError(errMsg, err)
 		return

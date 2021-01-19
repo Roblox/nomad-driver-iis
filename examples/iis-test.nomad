@@ -14,17 +14,24 @@ job "iis-test" {
       driver = "win_iis"
 
       config {
-        path = "C:\\inetpub\\wwwroot"
-        apppool_identity {
-          identity="SpecificUser"
-          username="vagrant"
-          password="vagrant"
-        }
+        path = "C:\\tmp\\website"
         bindings {
           type = "http"
           resource_port = "httplabel"
         }
       }
+
+      template {
+        data = <<EOH
+NOMAD_APPPOOL_USERNAME=vagrant
+NOMAD_APPPOOL_PASSWORD=vagrant
+EXAMPLE_ENV_VAR=test123
+EOH
+
+        destination = "secrets/file.env"
+        env         = true
+      }
+
       resources {
         cpu    = 100
         memory = 20
