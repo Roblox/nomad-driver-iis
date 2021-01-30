@@ -10,8 +10,10 @@ jobs:
     runs-on: windows-2016
     steps:
       - uses: actions/checkout@v2
-      - name: Install PFX File for tests
-        run: Import-PfxCertificate -FilePath .\vagrant\test.pfx -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
+      - name: Install Prerequisites (PFX, IIS)
+        run: |
+          Import-PfxCertificate -FilePath .\vagrant\test.pfx -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
+          Install-WindowsFeature -Name Web-Server -IncludeAllSubFeature -IncludeManagementTools -Restart
         shell: powershell
       - name: Run iis-driver integration tests
         run: |
