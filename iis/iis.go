@@ -302,6 +302,8 @@ func executeAppCmdWithInput(importXmlPath string, arg ...string) (appCmdResult, 
 
 			return result, nil
 		}
+		fmt.Println(out)
+		fmt.Println(err)
 		return result, err
 	} else {
 		xml.Unmarshal(out, &result)
