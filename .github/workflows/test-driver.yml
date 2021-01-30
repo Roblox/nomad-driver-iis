@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install PFX File for tests
         run: Import-PfxCertificate -FilePath .\vagrant\test.pfx -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
-          shell: powershell
+        shell: powershell
       - name: Run iis-driver integration tests
         run: |
           go test ./iis/ -count=1 -v
