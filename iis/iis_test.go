@@ -22,6 +22,8 @@ package iis
 // These tests ensure the functionality of the code being used by the nomad handle/driver will properly change iis as needed
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 	"time"
@@ -278,6 +280,13 @@ func TestWebsite(t *testing.T) {
 		t.Fatal("Error purging: ", err)
 	}
 
+	// Get parent dir of working dir to get xml file locations
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal("Failed to get parent dir: ", err)
+	}
+	parentDir := filepath.Dir(wd)
+
 	websiteConfig := &WebsiteConfig{
 		Name: guid,
 		Path: "C:\\inetpub\\wwwroot",
@@ -294,8 +303,8 @@ func TestWebsite(t *testing.T) {
 			Username: "vagrant",
 			Password: "vagrant",
 		},
-		AppPoolConfigPath: "C:\\vagrant\\vagrant\\testapppool.xml",
-		SiteConfigPath:    "C:\\vagrant\\vagrant\\testsite.xml",
+		AppPoolConfigPath: filepath.Join(parentDir, "vagrant", "testapppool.xml"),
+		SiteConfigPath:    filepath.Join(parentDir, "vagrant", "testsite.xml"),
 	}
 
 	// Create a website with the config and website name

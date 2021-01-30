@@ -292,7 +292,6 @@ func executeAppCmdWithInput(importXmlPath string, arg ...string) (appCmdResult, 
 		cmd = exec.Command(`C:\Windows\System32\inetsrv\APPCMD.exe`, arg...)
 	}
 
-	fmt.Println(cmd)
 	if out, err := cmd.Output(); err != nil {
 		// Attempt to parse output for verbose error messages in xml, otherwise return error code
 		// If an appcmd xml is parsed successfully, then accept that as source of error truth
@@ -303,8 +302,7 @@ func executeAppCmdWithInput(importXmlPath string, arg ...string) (appCmdResult, 
 
 			return result, nil
 		}
-		fmt.Println(out)
-		fmt.Println(err)
+
 		return result, err
 	} else {
 		xml.Unmarshal(out, &result)
