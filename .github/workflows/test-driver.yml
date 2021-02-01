@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ master ]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+    runs-on: windows-2016
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Prerequisites (PFX, IIS)
+        run: Import-PfxCertificate -FilePath .\test\test.pfx -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
+        shell: powershell
+      - name: Run iis-driver integration tests
+        run: go test ./iis/ -count=1 -v
