@@ -1,4 +1,7 @@
 # Nomad IIS Driver
+[![CI Actions Status](https://github.com/Roblox/nomad-driver-iis/workflows/CI/badge.svg)](https://github.com/Roblox/nomad-driver-iis/actions)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/Roblox/nomad-driver-iis/blob/master/LICENSE)
+[![Release](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/Roblox/nomad-driver-iis/releases/tag/v0.1.0)
 
 A driver plugin for nomad to orchestrate windows IIS website tasks.
 
