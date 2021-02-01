@@ -11,9 +11,9 @@ Get-CimInstance win32_service -filter "name='nomad'" | Invoke-CimMethod -Name Ch
 $nomadDir = "C:\\ProgramData\\nomad"
 New-Item -ItemType Directory -Path "$nomadDir\\plugin" -Force
 Copy-Item "C:\\vagrant\\win_iis.exe" -Destination "$nomadDir\\plugin" -Force
-Copy-Item "C:\\vagrant\\vagrant\\win_client.hcl" -Destination "$nomadDir\\conf\\client.hcl" -Force
+Copy-Item "C:\\vagrant\\test\\win_client.hcl" -Destination "$nomadDir\\conf\\client.hcl" -Force
 Start-Service nomad
 
-Import-PfxCertificate -FilePath C:\\vagrant\\vagrant\\test.pfx -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
+Import-PfxCertificate -FilePath "C:\\vagrant\\test\\test.pfx" -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
 
 Install-WindowsFeature -Name Web-Server -IncludeAllSubFeature -IncludeManagementTools -Restart

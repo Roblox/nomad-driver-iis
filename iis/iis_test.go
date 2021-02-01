@@ -303,8 +303,8 @@ func TestWebsite(t *testing.T) {
 			Username: "vagrant",
 			Password: "vagrant",
 		},
-		AppPoolConfigPath: filepath.Join(parentDir, "vagrant", "testapppool.xml"),
-		SiteConfigPath:    filepath.Join(parentDir, "vagrant", "testsite.xml"),
+		AppPoolConfigPath: filepath.Join(parentDir, "test", "testapppool.xml"),
+		SiteConfigPath:    filepath.Join(parentDir, "test", "testsite.xml"),
 	}
 
 	// Create a website with the config and website name
@@ -327,7 +327,7 @@ func TestWebsite(t *testing.T) {
 		assert.Equal(websiteConfig.AppPoolIdentity.Username, appPool.Add.ProcessModel.Username, "AppPool Identity Username doesn't match!")
 		assert.Equal(websiteConfig.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
 
-		// These values are supplied by the config.xml that is imported in from vagrant/testapppool.xml and vagrant/testsite.xml
+		// These values are supplied by the config.xml that is imported in from test/testapppool.xml and test/testsite.xml
 		assert.Equal("", appPool.RuntimeVersion, "AppPool RuntimeVersion doesn't match!")
 		assert.Equal("Integrated", appPool.PipelineMode, "AppPool PipelineMode doesn't match!")
 

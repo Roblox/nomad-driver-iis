@@ -14,7 +14,7 @@ jobs:
         run: C:\\Windows\\System32\\inetsrv\\appcmd.exe add apppool /name:TEST /managedRuntimeVersion:"v4.0" /managedPipelineMode:"Integrated"
       - name: Install Prerequisites (PFX, IIS)
         run: |
-          Import-PfxCertificate -FilePath .\vagrant\test.pfx -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
+          Import-PfxCertificate -FilePath .\test\test.pfx -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
         shell: powershell
       - name: Run iis-driver integration tests
         run: |
