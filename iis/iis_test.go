@@ -299,6 +299,7 @@ func TestWebsite(t *testing.T) {
 			"EXAMPLE_ENV_VAR_ALT": "test123",
 			"":                    "INVALID",
 			"   ":                 "INVALID_SPACE",
+			" FUN_SPACE ":         "test456",
 		},
 		AppPoolIdentity: iisAppPoolIdentity{
 			Identity: "SpecificUser",
@@ -340,6 +341,7 @@ func TestWebsite(t *testing.T) {
 			expectedAppPoolEnvVars := []appPoolAddEnvVar{
 				{Name: "EXAMPLE_ENV_VAR", Value: "test123"},
 				{Name: "EXAMPLE_ENV_VAR_ALT", Value: "test789"},
+				{Name: "FUN_SPACE", Value: "test456"},
 			}
 
 			assert.ElementsMatch(expectedAppPoolEnvVars, appPool.Add.EnvironmentVariables.Add, "AppPool EnvironmentVariables don't match!")
