@@ -352,7 +352,7 @@ func applyAppPoolEnvVars(appPoolName string, envVars map[string]string) error {
 	properties := []string{"set", "config", "-section:system.applicationHost/applicationPools"}
 
 	for key, val := range envVars {
-		if key == "" {
+		if strings.Trim(key, " ") == "" {
 			continue
 		}
 		if keyExists, isSameValue := doesAppPoolEnvVarExistWithSameValue(appPool, key, val); keyExists {
