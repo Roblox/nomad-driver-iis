@@ -40,7 +40,7 @@ const (
 
 	// pluginVersion allows the client to identify and use newer versions of
 	// an installed plugin
-	pluginVersion = "v0.2.0"
+	pluginVersion = "0.2.0"
 
 	// fingerprintPeriod is the interval at which the plugin will send
 	// fingerprint responses
@@ -245,7 +245,9 @@ func (d *Driver) handleFingerprint(ctx context.Context, ch chan<- *drivers.Finge
 // Gets IIS version and checks running state in SC
 func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 	fp := &drivers.Fingerprint{
-		Attributes:        map[string]*structs.Attribute{},
+		Attributes: map[string]*structs.Attribute{
+			"driver.win_iis.version": structs.NewStringAttribute(pluginVersion),
+		},
 		Health:            drivers.HealthStateHealthy,
 		HealthDescription: drivers.DriverHealthy,
 	}
