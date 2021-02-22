@@ -297,7 +297,8 @@ func TestWebsite(t *testing.T) {
 		Env: map[string]string{
 			"EXAMPLE_ENV_VAR":     "test123",
 			"EXAMPLE_ENV_VAR_ALT": "test123",
-			"": "INVALID",
+			"":                    "INVALID",
+			"   ":                 "INVALID_SPACE",
 		},
 		AppPoolIdentity: iisAppPoolIdentity{
 			Identity: "SpecificUser",
