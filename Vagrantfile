@@ -11,7 +11,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     ncw.vm.provision "shell", path: "scripts/win_provision.ps1"
     ncw.vm.provider :virtualbox do |vb|
       vb.name = "nomad-dev-win"
-      vb.memory = 2048
+      # The VM has a really bad time working off of 2GB of RAM, bump to 4GB
+      vb.memory = 4096
     end
   end
 end

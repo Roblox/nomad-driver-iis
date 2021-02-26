@@ -1,5 +1,6 @@
 # Increase log verbosity
-log_level = "INFO"
+log_level = "DEBUG"
+log_file = "C:\\ProgramData\\nomad\\logs\\nomad.log"
 
 # Setup data dir
 data_dir = "C:\\ProgramData\\nomad\\data"
