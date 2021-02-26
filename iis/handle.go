@@ -102,6 +102,8 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 
 	if !filepath.IsAbs(driverConfig.Path) {
 		websiteConfig.Path = filepath.Join(h.taskConfig.TaskDir().Dir, driverConfig.Path)
+	} else {
+		websiteConfig.Path = driverConfig.Path
 	}
 
 	// Gather Network Ports: http or https only
