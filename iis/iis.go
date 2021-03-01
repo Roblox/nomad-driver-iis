@@ -138,12 +138,12 @@ type iisAppPoolIdentity struct {
 
 // IIS Binding struct to match
 type iisBinding struct {
-	CertHash     string `codec:"cert_hash"`
-	HostName     string `codec:"hostname"`
-	IPAddress    string `codec:"ipaddress"`
-	Port         int    `codec:"port"`
-	ResourcePort string `codec:"resource_port"`
-	Type         string `codec:"type"`
+	CertHash  string `codec:"cert_hash"`
+	HostName  string `codec:"hostname"`
+	IPAddress string `codec:"ipaddress"`
+	Port      int
+	PortLabel string `codec:"port"`
+	Type      string `codec:"type"`
 }
 
 // Stat fields that are unmarshalled from WMI

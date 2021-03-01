@@ -23,7 +23,7 @@ job "iis-test" {
         path = "C:\\inetpub\\wwwroot"
         bindings {
           type = "http"
-          resource_port = "httplabel"
+          port = "httplabel"
         }
       }
 

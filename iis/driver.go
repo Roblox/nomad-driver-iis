@@ -84,12 +84,11 @@ var (
 		"apppool_config_path": hclspec.NewAttr("apppool_config_path", "string", false),
 		"apppool_identity":    hclspec.NewAttr("apppool_identity", "string", false),
 		"bindings": hclspec.NewBlockList("bindings", hclspec.NewObject(map[string]*hclspec.Spec{
-			"hostname":      hclspec.NewAttr("hostname", "string", false),
-			"ipaddress":     hclspec.NewAttr("ipaddress", "string", false),
-			"resource_port": hclspec.NewAttr("resource_port", "string", false),
-			"port":          hclspec.NewAttr("port", "number", false),
-			"type":          hclspec.NewAttr("type", "string", true),
-			"cert_hash":     hclspec.NewAttr("cert_hash", "string", false),
+			"hostname":  hclspec.NewAttr("hostname", "string", false),
+			"ipaddress": hclspec.NewAttr("ipaddress", "string", false),
+			"port":      hclspec.NewAttr("port", "string", true),
+			"type":      hclspec.NewAttr("type", "string", true),
+			"cert_hash": hclspec.NewAttr("cert_hash", "string", false),
 		})),
 	})
 

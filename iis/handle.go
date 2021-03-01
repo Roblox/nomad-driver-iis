@@ -106,44 +106,48 @@ func (h *taskHandle) run(driverConfig *TaskConfig) {
 		websiteConfig.Path = driverConfig.Path
 	}
 
-	// Gather Network Ports: http or https only
-	networks := h.taskConfig.Resources.NomadResources.Networks
-	if len(networks) == 0 {
-		errMsg := "Error in launching task: Trying to map ports but no network interface is available"
-		h.handleError(errMsg, errors.New(errMsg))
-		return
-	}
-
 	var iisBindings []iisBinding
-	for _, binding := range driverConfig.Bindings {
-		if binding.Port == 0 && binding.ResourcePort == "" {
-			errMsg := "Error in launching task: both binding.Port and binding.ResourcePort cannot be unset."
-			h.handleError(errMsg, errors.New(errMsg))
-			return
-		}
+	// If any bindings were specified, we move forward with port label cross lookups
+	if len(driverConfig.Bindings) > 0 {
+		if h.taskConfig.Resources.Ports != nil {
+			// parse group/shared resource ports. This is the preferred route for establishing network ports
+			// here is the relevant PR for the docker driver that drove this change: https://github.com/hashicorp/nomad/pull/8623
 
-		if binding.Port < 0 {
-			errMsg := "Error in launching task: binding.Port cannot be negative."
-			h.handleError(errMsg, errors.New(errMsg))
-			return
-		}
-
-		if binding.Port > 0 {
-			iisBindings = append(iisBindings, binding)
-			continue
-		}
-
-		for _, network := range networks {
-			for _, dynamicPort := range network.DynamicPorts {
-				if binding.ResourcePort == dynamicPort.Label {
-					binding.Port = dynamicPort.Value
+			for _, binding := range driverConfig.Bindings {
+				if port, ok := h.taskConfig.Resources.Ports.Get(binding.PortLabel); ok {
+					binding.Port = port.Value
 					iisBindings = append(iisBindings, binding)
+				} else {
+					errMsg := fmt.Sprintf("Port %s not found, check network stanza", binding.PortLabel)
+					h.handleError(errMsg, errors.New(errMsg))
+					return
 				}
 			}
-			for _, staticPort := range network.ReservedPorts {
-				if binding.ResourcePort == staticPort.Label {
-					binding.Port = staticPort.Value
-					iisBindings = append(iisBindings, binding)
+		} else if len(h.taskConfig.Resources.NomadResources.Networks) > 0 {
+			// parses a task's network stanza for dynamic/static ports
+			// this is deprecated as of Nomad v1.0+, in time this should be removed
+			// just like the docker driver, you can only work with one network stanza format over another
+
+			for _, binding := range driverConfig.Bindings {
+				foundPort := false
+				for _, network := range h.taskConfig.Resources.NomadResources.Networks {
+
+					for _, port := range network.ReservedPorts {
+						binding.Port = port.Value
+						iisBindings = append(iisBindings, binding)
+						foundPort = true
+					}
+
+					for _, port := range network.DynamicPorts {
+						binding.Port = port.Value
+						iisBindings = append(iisBindings, binding)
+						foundPort = true
+					}
+				}
+				if !foundPort {
+					errMsg := fmt.Sprintf("Port %s not found, check network stanza", binding.PortLabel)
+					h.handleError(errMsg, errors.New(errMsg))
+					return
 				}
 			}
 		}
