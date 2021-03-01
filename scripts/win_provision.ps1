@@ -3,8 +3,8 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
 
 choco install git.install --version=2.25.1 -y --no-progress
-choco install golang --version=1.14 -y --no-progress
-choco install nomad --version=0.11.0 -y --no-progress
+choco install golang --version=1.15 -y --no-progress
+choco install nomad --version=1.0.4 -y --no-progress
 
 Stop-Service nomad
 Get-CimInstance win32_service -filter "name='nomad'" | Invoke-CimMethod -Name Change -Arguments @{StartName="LocalSystem"} | Out-Null

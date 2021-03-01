@@ -58,8 +58,9 @@ Nomad currently doesn't have a clean way to use credentials to be used by the no
 ## Build & Test
 ### **Requirements**
 
-- [Nomad](https://www.nomadproject.io/downloads.html) >=v0.11
-- [Go](https://golang.org/doc/install) >=v1.11 (to build the provider plugin)
+- [Nomad](https://www.nomadproject.io/downloads.html) >=v1.0
+   - The driver will try to be backwards compatible with v0.11-v1.0 versions of Nomad, but tests will focus around v1.0 for ensuring stability with modern Nomad.
+- [Go](https://golang.org/doc/install) >=v1.15 (to build the provider plugin)
 - [Vagrant](https://www.vagrantup.com/downloads.html) >=v2.2
 - [VirtualBox](https://www.virtualbox.org/) v6.0 (or any version vagrant is compatible with)
 
