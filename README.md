@@ -34,8 +34,7 @@ A `resource_port` OR a `port` must be provided. Due to a current limitation, we 
 | :---: | :---: | :---: | :---: | :---: | :--- |
 | **hostname** | string | no | nil | 7.0 | HostName attribute for a given binding. |
 | **ipaddress** | string | no | * | 7.0 | IPAddress attribute for a given binding. |
-| **resource_port** | string | no | nil | 7.0 | Tie a `resources`->`network` port label to the binding. This allows us to use a dynamic port given by Nomad. |
-| **port** | number | no | 0 | 7.0 | Port attribute for a given binding. This will overwrite `resource_port` settings. |
+| **port** | string | yes | 0 | 7.0 | Tie a `resources`->`network` port label to the binding. This allows us to use a dynamic port given by Nomad. |
 | **type** | string | yes | nil | 7.0 | Type is the binding's protocol e.g. ('http', 'https', etc..) |
 | **cert_hash** | string | no | nil | 7.0 | Hash of a cert that exists prior to nomad allocating an IIS website. This **must** be set for SSL bindings. |
 For more info on IIS Bindings, you can go [here](https://docs.microsoft.com/en-us/iis/configuration/system.applicationhost/sites/site/bindings/binding)
