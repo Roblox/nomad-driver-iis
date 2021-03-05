@@ -19,15 +19,12 @@ package iis
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/client/stats"
-	shelpers "github.com/hashicorp/nomad/helper/stats"
 	"github.com/hashicorp/nomad/plugins/drivers"
 )
 
@@ -43,11 +40,18 @@ type taskHandle struct {
 	procState      drivers.TaskState
 	startedAt      time.Time
 	completedAt    time.Time
+	waitCh         chan struct{}
 	exitResult     *drivers.ExitResult
 	totalCpuStats  *stats.CpuStats
 	userCpuStats   *stats.CpuStats
 	systemCpuStats *stats.CpuStats
 	websiteStarted bool
+}
+
+func (h *taskHandle) ExitResult() *drivers.ExitResult {
+	h.stateLock.Lock()
+	defer h.stateLock.Unlock()
+	return h.exitResult.Copy()
 }
 
 func (h *taskHandle) TaskStatus() *drivers.TaskStatus {
@@ -70,104 +74,48 @@ func (h *taskHandle) IsRunning() bool {
 	return h.procState == drivers.TaskStateRunning
 }
 
-func (h *taskHandle) run(driverConfig *TaskConfig) {
-	// Every executor runs this init at creation for stats
-	if err := shelpers.Init(); err != nil {
-		h.logger.Error("unable to initialize stats", "error", err)
-	}
+func (h *taskHandle) run() {
+	// for {
+	// 	if isRunning, err := isWebsiteRunning(h.taskConfig.AllocID); err != nil {
+	// 		h.logger.Error("failed to wait for website; already terminated")
+	// 	} else if !isRunning {
+	// 		h.procState = drivers.TaskStateExited
+	// 	}
+	// }
 
-	websiteConfig := WebsiteConfig{
-		Name: h.taskConfig.AllocID,
-		Env:  map[string]string{},
-		AppPoolIdentity: iisAppPoolIdentity{
-			Identity: driverConfig.AppPoolIdentity,
-		},
-		AppPoolConfigPath: driverConfig.AppPoolConfigPath,
-		SiteConfigPath:    driverConfig.SiteConfigPath,
-	}
+	//h.websiteStarted = true
 
-	// Setup environment variables.
-	// NOMAD_APPPOOL_* are keywords for applying user/pass info for a given Application Pool in a secure manner
-	for key, val := range h.taskConfig.Env {
-		switch key {
-		case "NOMAD_APPPOOL_USERNAME":
-			websiteConfig.AppPoolIdentity.Identity = "SpecificUser"
-			websiteConfig.AppPoolIdentity.Username = val
-		case "NOMAD_APPPOOL_PASSWORD":
-			websiteConfig.AppPoolIdentity.Password = val
-		default:
-			websiteConfig.Env[key] = val
+	// Blocker code to monitor current task running status.
+	// On IIS task not running, set driver exit result and return.
+	var isRunning bool
+	var err error
+	for {
+		isRunning, err = isWebsiteRunning(h.taskConfig.AllocID)
+		if err != nil || !isRunning {
+			// result = &drivers.ExitResult{
+			// 	Err: fmt.Errorf("executor: error waiting on process: %v", err),
+			// }
+			break
 		}
+		// if !isRunning {
+		// 	result = &drivers.ExitResult{
+		// 		ExitCode: 0,
+		// 	}
+		// 	break
+		// }
+		time.Sleep(time.Second * 5)
 	}
 
-	if !filepath.IsAbs(driverConfig.Path) {
-		websiteConfig.Path = filepath.Join(h.taskConfig.TaskDir().Dir, driverConfig.Path)
-	} else {
-		websiteConfig.Path = driverConfig.Path
+	// Set the result
+	// IIS doesn't emit exit results on a site stopping. Maybe find a different solution to help provide why IIS has stopped.
+	h.stateLock.Lock()
+	h.exitResult = &drivers.ExitResult{
+		ExitCode: 0,
+		Signal:   0,
+		Err:      err,
 	}
-
-	var iisBindings []iisBinding
-	// If any bindings were specified, we move forward with port label cross lookups
-	if len(driverConfig.Bindings) > 0 {
-		if h.taskConfig.Resources.Ports != nil {
-			// parse group/shared resource ports. This is the preferred route for establishing network ports
-			// here is the relevant PR for the docker driver that drove this change: https://github.com/hashicorp/nomad/pull/8623
-
-			for _, binding := range driverConfig.Bindings {
-				if port, ok := h.taskConfig.Resources.Ports.Get(binding.PortLabel); ok {
-					binding.Port = port.Value
-					iisBindings = append(iisBindings, binding)
-				} else {
-					errMsg := fmt.Sprintf("Port %s not found, check network stanza", binding.PortLabel)
-					h.handleError(errMsg, errors.New(errMsg))
-					return
-				}
-			}
-		} else if len(h.taskConfig.Resources.NomadResources.Networks) > 0 {
-			// parses a task's network stanza for dynamic/static ports
-			// this is deprecated as of Nomad v1.0+, in time this should be removed
-			// just like the docker driver, you can only work with one network stanza format over another
-
-			for _, binding := range driverConfig.Bindings {
-				foundPort := false
-				for _, network := range h.taskConfig.Resources.NomadResources.Networks {
-
-					for _, port := range network.ReservedPorts {
-						binding.Port = port.Value
-						iisBindings = append(iisBindings, binding)
-						foundPort = true
-					}
-
-					for _, port := range network.DynamicPorts {
-						binding.Port = port.Value
-						iisBindings = append(iisBindings, binding)
-						foundPort = true
-					}
-				}
-				if !foundPort {
-					errMsg := fmt.Sprintf("Port %s not found, check network stanza", binding.PortLabel)
-					h.handleError(errMsg, errors.New(errMsg))
-					return
-				}
-			}
-		}
-	}
-
-	websiteConfig.Bindings = iisBindings
-
-	if err := createWebsite(&websiteConfig); err != nil {
-		errMsg := fmt.Sprintf("Error in creating website: %v", err)
-		h.handleError(errMsg, err)
-		return
-	}
-
-	if err := startWebsite(websiteConfig.Name); err != nil {
-		errMsg := fmt.Sprintf("Error in starting website: %v", err)
-		h.handleError(errMsg, err)
-		return
-	}
-
-	h.websiteStarted = true
+	h.stateLock.Unlock()
+	close(h.waitCh)
 }
 
 // handleError will log the error message (errMsg) and update the task handle with exit results.

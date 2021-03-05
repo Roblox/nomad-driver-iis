@@ -43,6 +43,24 @@ type WebsiteConfig struct {
 	SiteConfigPath    string
 }
 
+// Application schema given from appcmd.exe
+type appCmdApp struct {
+	Name         string          `xml:"APP.NAME,attr"`
+	AppPoolName  string          `xml:"APPPOOL.NAME,attr"`
+	SiteName     string          `xml:"SITE.NAME,attr"`
+	Path         string          `xml:"path,attr"`
+	Applications siteApplication `xml:"application"`
+}
+
+// Virtual Directory schema given from appcmd.exe
+type appCmdVDir struct {
+	Name         string     `xml:"VDIR.NAME,attr"`
+	AppName      string     `xml:"APP.NAME,attr"`
+	PhysicalPath string     `xml:"physicalPath,attr"`
+	Path         string     `xml:"path,attr"`
+	VDirs        []siteVDir `xml:"virtualDirectory"`
+}
+
 // Application Pool schema given from appcmd.exe
 type appCmdAppPool struct {
 	Name           string     `xml:"APPPOOL.NAME,attr"`
@@ -86,11 +104,13 @@ type appCmdMessage struct {
 
 // AppCmd schema for all results
 type appCmdResult struct {
+	Apps            []appCmdApp     `xml:"APP"`
 	AppPools        []appCmdAppPool `xml:"APPPOOL"`
 	Errors          []appCmdMessage `xml:"ERROR"`
 	Sites           []appCmdSite    `xml:"SITE"`
 	Statuses        []appCmdMessage `xml:"STATUS"`
 	WorkerProcesses []appCmdWP      `xml:"WP"`
+	VDirs           []appCmdVDir    `xml:"VDIR"`
 	XMLName         xml.Name        `xml:"appcmd"`
 }
 
@@ -309,6 +329,104 @@ func executeAppCmdWithInput(importXmlPath string, arg ...string) (appCmdResult, 
 	}
 }
 
+func createApplication(siteName string, path string) error {
+	if exists, err := doesApplicationExist(siteName, path); err != nil || exists {
+		return err
+	}
+
+	properties := []string{"add", "app", fmt.Sprintf("/site.name:%s", siteName), fmt.Sprintf("/path:%s", path)}
+	if _, err := executeAppCmd(properties...); err != nil {
+		return fmt.Errorf("Failed to create Application: %v", err)
+	}
+
+	return nil
+}
+
+// Returns if an Application Pool with the given name exists in IIS
+func doesApplicationExist(siteName string, path string) (bool, error) {
+	if app, err := getApplication(siteName, path, false); err != nil || app == nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// Returns an Application Pool with the given name
+func getApplication(siteName string, path string, allConfigs bool) (*appCmdApp, error) {
+	args := []string{"list", "app", siteName + path}
+	if allConfigs {
+		args = append(args, "/config:*")
+	}
+
+	if result, err := executeAppCmd(args...); err != nil {
+		return nil, fmt.Errorf("Failed to get Application: %v", err)
+	} else if len(result.Apps) == 0 {
+		return nil, nil
+	} else {
+		return &result.Apps[0], nil
+	}
+}
+
+func getValidVDirAppName(appName string) string {
+	if !strings.Contains(appName, "/") {
+		return appName + "/"
+	}
+	return appName
+}
+
+func createVDir(appName string, path string) error {
+	if exists, err := doesVDirExist(appName, path); err != nil || exists {
+		return err
+	}
+
+	// A "/"" must exist somewhere in the app name to append a vdir to it.
+	// if none are provided, append "/" to the end of the app name as default.
+	validAppName := getValidVDirAppName(appName)
+
+	properties := []string{"add", "vdir", fmt.Sprintf("/app.name:%s", validAppName), fmt.Sprintf("/path:%s", path)}
+	if _, err := executeAppCmd(properties...); err != nil {
+		return fmt.Errorf("Failed to create Virtual Directory: %v", err)
+	}
+
+	return nil
+}
+
+// Returns if an Application Pool with the given name exists in IIS
+func doesVDirExist(appName string, path string) (bool, error) {
+	if app, err := getVDir(appName, path, false); err != nil || app == nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// Returns an Application Pool with the given name
+func getVDir(appName string, path string, allConfigs bool) (*appCmdVDir, error) {
+
+	args := []string{"list", "vdir", appName + path}
+	if allConfigs {
+		args = append(args, "/config:*")
+	}
+
+	if result, err := executeAppCmd(args...); err != nil {
+		return nil, fmt.Errorf("Failed to get Virtual Directory: %v", err)
+	} else if len(result.VDirs) == 0 {
+		return nil, nil
+	} else {
+		return &result.VDirs[0], nil
+	}
+}
+
+// Returns an Application Pool with the given name
+func setVDir(appName string, path string, physicalPath string) error {
+	properties := []string{"set", "vdir", appName + path, fmt.Sprintf("-physicalPath:%s", physicalPath)}
+	if _, err := executeAppCmd(properties...); err != nil {
+		return fmt.Errorf("Failed to set Virtual Directory: %v", err)
+	}
+
+	return nil
+}
+
 // Applies the Application Pool identity user settings
 func applyAppPoolIdentity(appPoolName string, appPoolIdentity iisAppPoolIdentity) error {
 	properties := []string{"set", "config", "/section:applicationPools"}
@@ -511,6 +629,7 @@ func applySiteBindings(siteName string, bindings []iisBinding) error {
 		return err
 	}
 
+	var addBindings []iisBinding
 	currentBindings, err := site.getBindings()
 	if err != nil {
 		return err
@@ -519,33 +638,31 @@ func applySiteBindings(siteName string, bindings []iisBinding) error {
 	properties := []string{"set", "site", siteName}
 
 	// Compare current bindings with desired bindings
-	// Remove any bindings that exist in both arrays
+	// Remove any bindings that exist in both arrays from currentBindings. This allows us to determine which of the currentBindings are no longer needed.
 	var exists bool
-	cIndex := 0
-	for _, currentBinding := range currentBindings {
+	for _, binding := range bindings {
 		exists = false
+		if binding.IPAddress == "" {
+			binding.IPAddress = "*"
+		}
 
-		for index, binding := range bindings {
-			if binding.IPAddress == "" {
-				binding.IPAddress = "*"
-			}
+		for cIndex, currentBinding := range currentBindings {
+
 			if currentBinding.Type == binding.Type && currentBinding.IPAddress == binding.IPAddress && currentBinding.Port == binding.Port && currentBinding.HostName == binding.HostName {
 				exists = true
-				bindings[index] = bindings[len(bindings)-1]
-				bindings = bindings[:len(bindings)-1]
+				currentBindings[cIndex] = currentBindings[len(currentBindings)-1]
+				currentBindings = currentBindings[:len(currentBindings)-1]
 				break
 			}
 		}
 
 		if !exists {
-			currentBindings[cIndex] = currentBinding
-			cIndex++
+			addBindings = append(addBindings, binding)
 		}
 	}
-	currentBindings = currentBindings[:cIndex]
 
 	// Nothing is changed if there are no bindings to update
-	if len(currentBindings) == 0 && len(bindings) == 0 {
+	if len(currentBindings) == 0 && len(addBindings) == 0 {
 		return nil
 	}
 
@@ -565,7 +682,7 @@ func applySiteBindings(siteName string, bindings []iisBinding) error {
 	}
 
 	// Add bindings that are desired
-	for _, binding := range bindings {
+	for _, binding := range addBindings {
 		if binding.Type == "https" {
 			if binding.CertHash == "" {
 				return fmt.Errorf("HTTPS binding used, but no cert hash was supplied!")
@@ -599,12 +716,12 @@ func applySiteBindings(siteName string, bindings []iisBinding) error {
 }
 
 // Creates a Site with the given name and applies an IIS exported Site xml if a path is provided
-func createSite(siteName string, sitePath string, configPath string) error {
+func createSite(siteName string, configPath string) error {
 	if exists, err := doesSiteExist(siteName); err != nil || exists {
 		return err
 	}
 
-	properties := []string{"add", "site", fmt.Sprintf("/name:%s", siteName), fmt.Sprintf("/physicalPath:%s", sitePath)}
+	properties := []string{"add", "site", fmt.Sprintf("/name:%s", siteName)}
 	if _, err := executeAppCmdWithInput(configPath, properties...); err != nil {
 		return fmt.Errorf("Failed to create Site: %v", err)
 	}
@@ -746,9 +863,23 @@ func createWebsite(websiteConfig *WebsiteConfig) error {
 	if err := applyAppPoolEnvVars(websiteConfig.Name, websiteConfig.Env); err != nil {
 		return err
 	}
-	if err := createSite(websiteConfig.Name, websiteConfig.Path, websiteConfig.SiteConfigPath); err != nil {
+
+	// A "site" is made of Site -> Applications -> Virtual Dirs
+	// The default "path" for a site is "/", this is the relative path that is presented to urls
+	// By default, we bind the provided website config path (physicalPath) to the root virtual dir.
+	if err := createSite(websiteConfig.Name, websiteConfig.SiteConfigPath); err != nil {
 		return err
 	}
+	if err := createApplication(websiteConfig.Name, "/"); err != nil {
+		return err
+	}
+	if err := createVDir(websiteConfig.Name, "/"); err != nil {
+		return err
+	}
+	if err := setVDir(websiteConfig.Name, "/", websiteConfig.Path); err != nil {
+		return err
+	}
+
 	if err := applySiteAppPool(websiteConfig.Name, websiteConfig.Name); err != nil {
 		return err
 	}
@@ -808,6 +939,15 @@ func getWebsiteProcessIds(websiteName string) ([]int, error) {
 	return processIds, nil
 }
 
+type win32PerfFormattedDataPerfProcProcess struct {
+	WorkingSetPrivate uint64
+}
+
+type win32Process struct {
+	KernelModeTime uint64
+	UserModeTime   uint64
+}
+
 // Gets the WMI CPU and Memory stats of a given website
 func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
 	// Get a list of process ids tied to the app pool
@@ -816,44 +956,54 @@ func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
 		return nil, err
 	}
 
+	stats := &wmiProcessStats{
+		WorkingSetPrivate: 0,
+		KernelModeTime:    0,
+		UserModeTime:      0,
+	}
+
 	// No process ids means no stats.
 	// IIS sites/app pools can be in a state without an actively running process id.
 	if len(processIds) == 0 {
-		return &wmiProcessStats{
-			WorkingSetPrivate: 0,
-			KernelModeTime:    0,
-			UserModeTime:      0,
-		}, nil
+		return stats, nil
 	}
 
 	// Query WMI for cpu stats with the given process ids
-	var wmiProcesses []wmiProcessStats
-	if err := wmi.Query(fmt.Sprintf("SELECT KernelModeTime,UserModeTime FROM Win32_Process WHERE ProcessID=%s", strings.Join(processIds, "OR ProcessID=")), &wmiProcesses); err != nil {
+	var win32Processes []win32Process
+	q := wmi.CreateQuery(&win32Processes, fmt.Sprintf("WHERE ProcessID=%s", strings.Join(processIds, "OR ProcessID=")), "Win32_Process")
+	// if err := wmi.Query(fmt.Sprintf("SELECT KernelModeTime,UserModeTime FROM Win32_Process WHERE ProcessID=%s", strings.Join(processIds, "OR ProcessID=")), &win32Processes); err != nil {
+	// 	return nil, err
+	// }
+	if err := wmi.Query(q, &win32Processes); err != nil {
 		return nil, err
 	}
 
 	// Sum up all cpu stats
-	var stats wmiProcessStats
-	for _, process := range wmiProcesses {
+	for _, process := range win32Processes {
 		stats.KernelModeTime += process.KernelModeTime
 		stats.UserModeTime += process.UserModeTime
 	}
 
 	// Query WMI for memory stats with the given process ids
 	// We are only using the WorkingSetPrivate for our memory to better align the Windows Task Manager and the RSS field nomad is expecting
-	if err := wmi.Query(fmt.Sprintf("SELECT WorkingSetPrivate FROM Win32_PerfFormattedData_PerfProc_Process WHERE IDProcess=%s", strings.Join(processIds, "OR IDProcess=")), &wmiProcesses); err != nil {
+	var formattedProcess []win32PerfFormattedDataPerfProcProcess
+	q = wmi.CreateQuery(&formattedProcess, fmt.Sprintf("WHERE IDProcess=%s", strings.Join(processIds, "OR IDProcess=")), "Win32_PerfFormattedData_PerfProc_Process")
+	if err := wmi.Query(q, &formattedProcess); err != nil {
 		return nil, err
 	}
+	// if err := wmi.Query(fmt.Sprintf("SELECT WorkingSetPrivate FROM Win32_PerfFormattedData_PerfProc_Process WHERE IDProcess=%s", strings.Join(processIds, "OR IDProcess=")), &wmiProcesses); err != nil {
+	// 	return nil, err
+	// }
 
 	// Sum up all memory stats
-	for _, process := range wmiProcesses {
+	for _, process := range formattedProcess {
 		stats.WorkingSetPrivate += process.WorkingSetPrivate
 	}
 
 	// Need to multiply cpu stats by one hundred to align with nomad method CpuStats.Percent's expected decimal placement
 	stats.KernelModeTime *= 100
 	stats.UserModeTime *= 100
-	return &stats, nil
+	return stats, nil
 }
 
 func isWebsiteStarted(websiteName string) (bool, error) {

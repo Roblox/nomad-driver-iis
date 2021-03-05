@@ -10,7 +10,7 @@ endif
 
 default: build
 
-.PHONY: clean
+.PHONY: clean test
 clean:
 	${RMCMD} ${PLUGIN_BINARY}
 	vagrant destroy -f
@@ -26,3 +26,4 @@ converge: build up
 
 test:   converge
 	vagrant winrm -s cmd -c 'chdir C:\vagrant && go test ./iis/ -count=1 -v'
+	vagrant winrm -s powershell -c 'Invoke-Pester "C:\vagrant\test\e2e" -ExcludeTag "Skip"'

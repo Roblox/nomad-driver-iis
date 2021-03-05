@@ -17,3 +17,6 @@ jobs:
         shell: powershell
       - name: Run iis-driver integration tests
         run: go test ./iis/ -count=1 -v
+      - name: Run iis-driver end to end tests
+        shell: powershell
+        run: Invoke-Pester ".\test\e2e" -ExcludeTag "Skip"
