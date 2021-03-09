@@ -808,6 +808,17 @@ func getWebsiteProcessIds(websiteName string) ([]int, error) {
 	return processIds, nil
 }
 
+// WMI Internal Type for gather WorkingSet Memory
+type win32PerfFormattedDataPerfProcProcess struct {
+	WorkingSetPrivate uint64
+}
+
+// WMI Internal Type for gathering CPU usage of a process
+type win32Process struct {
+	KernelModeTime uint64
+	UserModeTime   uint64
+}
+
 // Gets the WMI CPU and Memory stats of a given website
 func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
 	// Get a list of process ids tied to the app pool
@@ -816,44 +827,49 @@ func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
 		return nil, err
 	}
 
+	stats := &wmiProcessStats{
+		WorkingSetPrivate: 0,
+		KernelModeTime:    0,
+		UserModeTime:      0,
+	}
+
 	// No process ids means no stats.
 	// IIS sites/app pools can be in a state without an actively running process id.
 	if len(processIds) == 0 {
-		return &wmiProcessStats{
-			WorkingSetPrivate: 0,
-			KernelModeTime:    0,
-			UserModeTime:      0,
-		}, nil
+		return stats, nil
 	}
 
 	// Query WMI for cpu stats with the given process ids
-	var wmiProcesses []wmiProcessStats
-	if err := wmi.Query(fmt.Sprintf("SELECT KernelModeTime,UserModeTime FROM Win32_Process WHERE ProcessID=%s", strings.Join(processIds, "OR ProcessID=")), &wmiProcesses); err != nil {
+	var win32Processes []win32Process
+	query := wmi.CreateQuery(&win32Processes, fmt.Sprintf("WHERE ProcessID=%s", strings.Join(processIds, "OR ProcessID=")), "Win32_Process")
+	if err := wmi.Query(query, &win32Processes); err != nil {
 		return nil, err
 	}
 
 	// Sum up all cpu stats
-	var stats wmiProcessStats
-	for _, process := range wmiProcesses {
+	for _, process := range win32Processes {
 		stats.KernelModeTime += process.KernelModeTime
 		stats.UserModeTime += process.UserModeTime
 	}
 
+	var formattedProcess []win32PerfFormattedDataPerfProcProcess
+
 	// Query WMI for memory stats with the given process ids
 	// We are only using the WorkingSetPrivate for our memory to better align the Windows Task Manager and the RSS field nomad is expecting
-	if err := wmi.Query(fmt.Sprintf("SELECT WorkingSetPrivate FROM Win32_PerfFormattedData_PerfProc_Process WHERE IDProcess=%s", strings.Join(processIds, "OR IDProcess=")), &wmiProcesses); err != nil {
+	query = wmi.CreateQuery(&formattedProcess, fmt.Sprintf("WHERE IDProcess=%s", strings.Join(processIds, "OR IDProcess=")), "Win32_PerfFormattedData_PerfProc_Process")
+	if err := wmi.Query(query, &formattedProcess); err != nil {
 		return nil, err
 	}
 
 	// Sum up all memory stats
-	for _, process := range wmiProcesses {
+	for _, process := range formattedProcess {
 		stats.WorkingSetPrivate += process.WorkingSetPrivate
 	}
 
 	// Need to multiply cpu stats by one hundred to align with nomad method CpuStats.Percent's expected decimal placement
 	stats.KernelModeTime *= 100
 	stats.UserModeTime *= 100
-	return &stats, nil
+	return stats, nil
 }
 
 func isWebsiteStarted(websiteName string) (bool, error) {
