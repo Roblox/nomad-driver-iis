@@ -22,6 +22,7 @@ package iis
 // These tests ensure the functionality of the code being used by the nomad handle/driver will properly change iis as needed
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -477,6 +478,9 @@ func TestWebsiteWithConfig(t *testing.T) {
 
 	websiteConfig.AppPoolConfigPath = filepath.Join(parentDir, "test", "testapppool.xml")
 	websiteConfig.SiteConfigPath = filepath.Join(parentDir, "test", "testsite.xml")
+
+	fmt.Println("AppPool Path:", websiteConfig.AppPoolConfigPath)
+	fmt.Println("AppPool Path:", websiteConfig.SiteConfigPath)
 
 	// Create a website with the config and website name
 	if err := createWebsite(&websiteConfig); err != nil {
