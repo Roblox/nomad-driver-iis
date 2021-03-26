@@ -26,7 +26,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"testing"
 	"time"
@@ -471,17 +470,17 @@ func TestWebsiteWithConfig(t *testing.T) {
 	}
 
 	// Get parent dir of working dir to get xml file locations
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal("Failed to get parent dir: ", err)
-	}
-	parentDir := filepath.Dir(wd)
+	// wd, err := os.Getwd()
+	// if err != nil {
+	// 	t.Fatal("Failed to get parent dir: ", err)
+	// }
+	// parentDir := filepath.Dir(wd)
 
 	// websiteConfig.AppPoolConfigPath = filepath.Join(parentDir, "test", "testapppool.xml")
 	// websiteConfig.SiteConfigPath = filepath.Join(parentDir, "test", "testsite.xml")
 
-	fmt.Println("AppPool Path:", websiteConfig.AppPoolConfigPath)
-	fmt.Println("AppPool Path:", websiteConfig.SiteConfigPath)
+	// fmt.Println("AppPool Path:", websiteConfig.AppPoolConfigPath)
+	// fmt.Println("AppPool Path:", websiteConfig.SiteConfigPath)
 
 	// Create a website with the config and website name
 	if err := createWebsite(&websiteConfig); err != nil {
@@ -531,6 +530,7 @@ func TestWebsiteWithConfig(t *testing.T) {
 	// Testing if GHA has a slower startup time for IIS websites
 	timeout := time.Now().Add(15 * time.Second)
 	isRunning := false
+	var err error
 	for {
 		isRunning, err = isWebsiteRunning(guid)
 		if err != nil {
