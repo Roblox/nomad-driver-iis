@@ -523,10 +523,22 @@ func TestWebsiteWithConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Testing if GHA has a slower startup time for IIS websites
+	timeout := time.Now().Add(15 * time.Second)
+	isRunning := false
+	for {
+		isRunning, err = isWebsiteRunning(guid)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if isRunning || time.Now().After(timeout) {
+			break
+		}
+	}
+
 	// Verify that the website is running
-	if isRunning, err := isWebsiteRunning(guid); err != nil {
-		t.Fatal(err)
-	} else if !isRunning {
+	if !isRunning {
 		t.Fatal("Website is not started!")
 	}
 
