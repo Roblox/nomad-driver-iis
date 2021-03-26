@@ -549,15 +549,10 @@ func applySiteBindings(siteName string, bindings []iisBinding) error {
 		}
 
 		for cIndex, currentBinding := range currentBindings {
-
-			if binding.IPAddress == "" {
-				binding.IPAddress = "*"
-			}
 			if currentBinding.Type == binding.Type && currentBinding.IPAddress == binding.IPAddress && currentBinding.Port == binding.Port && currentBinding.HostName == binding.HostName {
 				exists = true
 				currentBindings[cIndex] = currentBindings[len(currentBindings)-1]
 				currentBindings = currentBindings[:len(currentBindings)-1]
-
 				break
 			}
 		}
@@ -786,13 +781,13 @@ func getApplication(siteName string, path string, allConfigs bool) (*appCmdApp, 
 		args = append(args, "/config:*")
 	}
 
-	if result, err := executeAppCmd(args...); err != nil {
+	result, err := executeAppCmd(args...)
+	if err != nil {
 		return nil, fmt.Errorf("Failed to get Application: %v", err)
 	} else if len(result.Apps) == 0 {
 		return nil, nil
-	} else {
-		return &result.Apps[0], nil
 	}
+	return &result.Apps[0], nil
 }
 
 // Returns a valid VirtualDir name for IIS/appcmd to ingest
@@ -832,19 +827,18 @@ func doesVDirExist(appName string, path string) (bool, error) {
 
 // Returns a VirtualDir with the given Application Name and path
 func getVDir(appName string, path string, allConfigs bool) (*appCmdVDir, error) {
-
 	args := []string{"list", "vdir", appName + path}
 	if allConfigs {
 		args = append(args, "/config:*")
 	}
 
-	if result, err := executeAppCmd(args...); err != nil {
+	result, err := executeAppCmd(args...)
+	if err != nil {
 		return nil, fmt.Errorf("Failed to get Virtual Directory: %v", err)
 	} else if len(result.VDirs) == 0 {
 		return nil, nil
-	} else {
-		return &result.VDirs[0], nil
 	}
+	return &result.VDirs[0], nil
 }
 
 // Sets a VirtualDir with the given Application Name and path to the provided physical path

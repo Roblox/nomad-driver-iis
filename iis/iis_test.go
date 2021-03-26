@@ -373,7 +373,6 @@ func TestWebsite(t *testing.T) {
 	} else if len(processIDs) > 0 {
 		for _, processID := range processIDs {
 			cmd := exec.Command(`C:\Windows\System32\taskkill.exe`, "/PID", processID, "/F")
-
 			if err := cmd.Run(); err != nil {
 				t.Fatal(err)
 			}
@@ -475,6 +474,9 @@ func TestWebsiteWithConfig(t *testing.T) {
 	}
 	parentDir := filepath.Dir(wd)
 
+	// Set default for appPool's identity here to prevent GHA-Hosted-CI from corrupting applicationHost.config due ot unknown user at time of running
+	websiteConfig.AppPoolIdentity = iisAppPoolIdentity{}
+
 	websiteConfig.AppPoolConfigPath = filepath.Join(parentDir, "test", "testapppool.xml")
 	websiteConfig.SiteConfigPath = filepath.Join(parentDir, "test", "testsite.xml")
 
@@ -489,7 +491,7 @@ func TestWebsiteWithConfig(t *testing.T) {
 	if appPool, err := getAppPool(guid, true); err != nil {
 		t.Fatal("Failed to get Site info!")
 	} else {
-		assert.Equal(websiteConfig.AppPoolIdentity.Identity, appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
+		assert.Equal("ApplicationPoolIdentity", appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
 		assert.Equal(websiteConfig.AppPoolIdentity.Username, appPool.Add.ProcessModel.Username, "AppPool Identity Username doesn't match!")
 		assert.Equal(websiteConfig.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
 
