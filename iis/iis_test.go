@@ -22,8 +22,6 @@ package iis
 // These tests ensure the functionality of the code being used by the nomad handle/driver will properly change iis as needed
 
 import (
-	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -375,7 +373,6 @@ func TestWebsite(t *testing.T) {
 	} else if len(processIDs) > 0 {
 		for _, processID := range processIDs {
 			cmd := exec.Command(`C:\Windows\System32\taskkill.exe`, "/PID", processID, "/F")
-
 			if err := cmd.Run(); err != nil {
 				t.Fatal(err)
 			}
@@ -477,13 +474,11 @@ func TestWebsiteWithConfig(t *testing.T) {
 	}
 	parentDir := filepath.Dir(wd)
 
-	websiteConfig.AppPoolConfigPath = filepath.Join(parentDir, "test", "testapppool.xml")
-	websiteConfig.SiteConfigPath = filepath.Join(parentDir, "test", "testsite.xml")
-
+	// Set default for appPool's identity here to prevent GHA-Hosted-CI from corrupting applicationHost.config due ot unknown user at time of running
 	websiteConfig.AppPoolIdentity = iisAppPoolIdentity{}
 
-	fmt.Println("AppPool Path:", websiteConfig.AppPoolConfigPath)
-	fmt.Println("AppPool Path:", websiteConfig.SiteConfigPath)
+	websiteConfig.AppPoolConfigPath = filepath.Join(parentDir, "test", "testapppool.xml")
+	websiteConfig.SiteConfigPath = filepath.Join(parentDir, "test", "testsite.xml")
 
 	// Create a website with the config and website name
 	if err := createWebsite(&websiteConfig); err != nil {
@@ -496,12 +491,12 @@ func TestWebsiteWithConfig(t *testing.T) {
 	if appPool, err := getAppPool(guid, true); err != nil {
 		t.Fatal("Failed to get Site info!")
 	} else {
-		// assert.Equal(websiteConfig.AppPoolIdentity.Identity, appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
-		// assert.Equal(websiteConfig.AppPoolIdentity.Username, appPool.Add.ProcessModel.Username, "AppPool Identity Username doesn't match!")
-		// assert.Equal(websiteConfig.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
+		assert.Equal("ApplicationPoolIdentity", appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
+		assert.Equal(websiteConfig.AppPoolIdentity.Username, appPool.Add.ProcessModel.Username, "AppPool Identity Username doesn't match!")
+		assert.Equal(websiteConfig.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
 
 		// These values are supplied by the config.xml that is imported in from test/testapppool.xml and test/testsite.xml
-		assert.Equal("v4.0", appPool.RuntimeVersion, "AppPool RuntimeVersion doesn't match!")
+		assert.Equal("", appPool.RuntimeVersion, "AppPool RuntimeVersion doesn't match!")
 		assert.Equal("Integrated", appPool.PipelineMode, "AppPool PipelineMode doesn't match!")
 
 		// Verify env vars are properly set for both altered and non-altered env vars for IIS 10+
@@ -530,34 +525,10 @@ func TestWebsiteWithConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Testing if GHA has a slower startup time for IIS websites
-	timeout := time.Now().Add(15 * time.Second)
-	isRunning := false
-	for {
-		isRunning, err = isWebsiteRunning(guid)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if isRunning || time.Now().After(timeout) {
-			break
-		}
-	}
-
 	// Verify that the website is running
-	if !isRunning {
-		file, err := os.Open(`C:\Windows\System32\Inetsrv\Config\applicationHost.config`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() {
-			if err = file.Close(); err != nil {
-				t.Fatal(err)
-			}
-		}()
-
-		b, err := ioutil.ReadAll(file)
-		fmt.Println(string(b))
+	if isRunning, err := isWebsiteRunning(guid); err != nil {
+		t.Fatal(err)
+	} else if !isRunning {
 		t.Fatal("Website is not started!")
 	}
 

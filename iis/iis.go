@@ -125,6 +125,24 @@ type appCmdSite struct {
 	Site     site   `xml:"site"`
 }
 
+// Application schema given from appcmd.exe
+type appCmdApp struct {
+	Name         string          `xml:"APP.NAME,attr"`
+	AppPoolName  string          `xml:"APPPOOL.NAME,attr"`
+	SiteName     string          `xml:"SITE.NAME,attr"`
+	Path         string          `xml:"path,attr"`
+	Applications siteApplication `xml:"application"`
+}
+
+// Virtual Directory schema given from appcmd.exe
+type appCmdVDir struct {
+	Name         string     `xml:"VDIR.NAME,attr"`
+	AppName      string     `xml:"APP.NAME,attr"`
+	PhysicalPath string     `xml:"physicalPath,attr"`
+	Path         string     `xml:"path,attr"`
+	VDirs        []siteVDir `xml:"virtualDirectory"`
+}
+
 // Nested Site schema given from appcmd.exe
 type site struct {
 	Name        string          `xml:"name,attr"`
@@ -650,7 +668,6 @@ func applySiteBindings(siteName string, bindings []iisBinding) error {
 		}
 
 		for cIndex, currentBinding := range currentBindings {
-
 			if currentBinding.Type == binding.Type && currentBinding.IPAddress == binding.IPAddress && currentBinding.Port == binding.Port && currentBinding.HostName == binding.HostName {
 				exists = true
 				currentBindings[cIndex] = currentBindings[len(currentBindings)-1]
@@ -688,7 +705,7 @@ func applySiteBindings(siteName string, bindings []iisBinding) error {
 	for _, binding := range addBindings {
 		if binding.Type == "https" {
 			if binding.CertHash == "" {
-				return fmt.Errorf("HTTPS binding used, but no cert hash was supplied!")
+				return fmt.Errorf("HTTPS binding used, but no cert hash was supplied")
 			}
 
 			bindingInfo, err := getSSLCertBinding(binding.IPAddress, binding.Port)
@@ -847,6 +864,106 @@ func stopSite(siteName string) error {
 func applySiteAppPool(siteName string, appPoolName string) error {
 	if _, err := executeAppCmd("set", "app", fmt.Sprintf("%s/", siteName), fmt.Sprintf("/applicationPool:%s", appPoolName)); err != nil {
 		return fmt.Errorf("Failed to set Site Application Pool: %v", err)
+	}
+
+	return nil
+}
+
+// Creates an Application with the given Site name and path
+func createApplication(siteName string, path string) error {
+	if exists, err := doesApplicationExist(siteName, path); err != nil || exists {
+		return err
+	}
+
+	properties := []string{"add", "app", fmt.Sprintf("/site.name:%s", siteName), fmt.Sprintf("/path:%s", path)}
+	if _, err := executeAppCmd(properties...); err != nil {
+		return fmt.Errorf("Failed to create Application: %v", err)
+	}
+
+	return nil
+}
+
+// Returns if an Application with the given Site name and path exists in IIS
+func doesApplicationExist(siteName string, path string) (bool, error) {
+	if app, err := getApplication(siteName, path, false); err != nil || app == nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// Returns an Application with the given Site name and path
+func getApplication(siteName string, path string, allConfigs bool) (*appCmdApp, error) {
+	args := []string{"list", "app", siteName + path}
+	if allConfigs {
+		args = append(args, "/config:*")
+	}
+
+	result, err := executeAppCmd(args...)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get Application: %v", err)
+	} else if len(result.Apps) == 0 {
+		return nil, nil
+	}
+	return &result.Apps[0], nil
+}
+
+// Returns a valid VirtualDir name for IIS/appcmd to ingest
+// A "/" must exist somewhere in the app name to append a vdir to it.
+// If none are provided, append "/" to the end of the app name as default.
+func getValidVDirAppName(appName string) string {
+	if !strings.Contains(appName, "/") {
+		return appName + "/"
+	}
+	return appName
+}
+
+// Creates a VirtualDir with the given Application Name and path
+func createVDir(appName string, path string) error {
+	if exists, err := doesVDirExist(appName, path); err != nil || exists {
+		return err
+	}
+
+	validAppName := getValidVDirAppName(appName)
+
+	properties := []string{"add", "vdir", fmt.Sprintf("/app.name:%s", validAppName), fmt.Sprintf("/path:%s", path)}
+	if _, err := executeAppCmd(properties...); err != nil {
+		return fmt.Errorf("Failed to create Virtual Directory: %v", err)
+	}
+
+	return nil
+}
+
+// Returns if a VirtualDir with the given Application Name and path exists
+func doesVDirExist(appName string, path string) (bool, error) {
+	if app, err := getVDir(appName, path, false); err != nil || app == nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// Returns a VirtualDir with the given Application Name and path
+func getVDir(appName string, path string, allConfigs bool) (*appCmdVDir, error) {
+	args := []string{"list", "vdir", appName + path}
+	if allConfigs {
+		args = append(args, "/config:*")
+	}
+
+	result, err := executeAppCmd(args...)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get Virtual Directory: %v", err)
+	} else if len(result.VDirs) == 0 {
+		return nil, nil
+	}
+	return &result.VDirs[0], nil
+}
+
+// Sets a VirtualDir with the given Application Name and path to the provided physical path
+func setVDir(appName string, path string, physicalPath string) error {
+	properties := []string{"set", "vdir", appName + path, fmt.Sprintf("-physicalPath:%s", physicalPath)}
+	if _, err := executeAppCmd(properties...); err != nil {
+		return fmt.Errorf("Failed to set Virtual Directory: %v", err)
 	}
 
 	return nil
