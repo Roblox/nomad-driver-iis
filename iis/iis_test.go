@@ -23,6 +23,7 @@ package iis
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -543,6 +544,18 @@ func TestWebsiteWithConfig(t *testing.T) {
 
 	// Verify that the website is running
 	if !isRunning {
+		file, err := os.Open(`C:\Windows\System32\Inetsrv\Config\applicationHost.config`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err = file.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		b, err := ioutil.ReadAll(file)
+		fmt.Print(b)
 		t.Fatal("Website is not started!")
 	}
 
