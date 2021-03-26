@@ -26,6 +26,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"testing"
 	"time"
@@ -470,17 +471,17 @@ func TestWebsiteWithConfig(t *testing.T) {
 	}
 
 	// Get parent dir of working dir to get xml file locations
-	// wd, err := os.Getwd()
-	// if err != nil {
-	// 	t.Fatal("Failed to get parent dir: ", err)
-	// }
-	// parentDir := filepath.Dir(wd)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal("Failed to get parent dir: ", err)
+	}
+	parentDir := filepath.Dir(wd)
 
-	// websiteConfig.AppPoolConfigPath = filepath.Join(parentDir, "test", "testapppool.xml")
-	// websiteConfig.SiteConfigPath = filepath.Join(parentDir, "test", "testsite.xml")
+	websiteConfig.AppPoolConfigPath = filepath.Join(parentDir, "test", "testapppool.xml")
+	websiteConfig.SiteConfigPath = filepath.Join(parentDir, "test", "testsite.xml")
 
-	// fmt.Println("AppPool Path:", websiteConfig.AppPoolConfigPath)
-	// fmt.Println("AppPool Path:", websiteConfig.SiteConfigPath)
+	fmt.Println("AppPool Path:", websiteConfig.AppPoolConfigPath)
+	fmt.Println("AppPool Path:", websiteConfig.SiteConfigPath)
 
 	// Create a website with the config and website name
 	if err := createWebsite(&websiteConfig); err != nil {
@@ -489,31 +490,31 @@ func TestWebsiteWithConfig(t *testing.T) {
 
 	websiteConfig.Env["EXAMPLE_ENV_VAR_ALT"] = "test789"
 
-	// // Verify app pool settings match with given config
-	// if appPool, err := getAppPool(guid, true); err != nil {
-	// 	t.Fatal("Failed to get Site info!")
-	// } else {
-	// 	assert.Equal(websiteConfig.AppPoolIdentity.Identity, appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
-	// 	assert.Equal(websiteConfig.AppPoolIdentity.Username, appPool.Add.ProcessModel.Username, "AppPool Identity Username doesn't match!")
-	// 	assert.Equal(websiteConfig.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
+	// Verify app pool settings match with given config
+	if appPool, err := getAppPool(guid, true); err != nil {
+		t.Fatal("Failed to get Site info!")
+	} else {
+		assert.Equal(websiteConfig.AppPoolIdentity.Identity, appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
+		assert.Equal(websiteConfig.AppPoolIdentity.Username, appPool.Add.ProcessModel.Username, "AppPool Identity Username doesn't match!")
+		assert.Equal(websiteConfig.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
 
-	// 	// These values are supplied by the config.xml that is imported in from test/testapppool.xml and test/testsite.xml
-	// 	assert.Equal("v4.0", appPool.RuntimeVersion, "AppPool RuntimeVersion doesn't match!")
-	// 	assert.Equal("Integrated", appPool.PipelineMode, "AppPool PipelineMode doesn't match!")
+		// These values are supplied by the config.xml that is imported in from test/testapppool.xml and test/testsite.xml
+		assert.Equal("v4.0", appPool.RuntimeVersion, "AppPool RuntimeVersion doesn't match!")
+		assert.Equal("Integrated", appPool.PipelineMode, "AppPool PipelineMode doesn't match!")
 
-	// 	// Verify env vars are properly set for both altered and non-altered env vars for IIS 10+
-	// 	if iisVersion, err := getVersion(); err != nil {
-	// 		t.Fatal(err)
-	// 	} else if iisVersion.Major >= 10 {
-	// 		expectedAppPoolEnvVars := []appPoolAddEnvVar{
-	// 			{Name: "EXAMPLE_ENV_VAR", Value: "test123"},
-	// 			{Name: "EXAMPLE_ENV_VAR_ALT", Value: "test789"},
-	// 			{Name: "FUN_SPACE", Value: "test456"},
-	// 		}
+		// Verify env vars are properly set for both altered and non-altered env vars for IIS 10+
+		if iisVersion, err := getVersion(); err != nil {
+			t.Fatal(err)
+		} else if iisVersion.Major >= 10 {
+			expectedAppPoolEnvVars := []appPoolAddEnvVar{
+				{Name: "EXAMPLE_ENV_VAR", Value: "test123"},
+				{Name: "EXAMPLE_ENV_VAR_ALT", Value: "test789"},
+				{Name: "FUN_SPACE", Value: "test456"},
+			}
 
-	// 		assert.ElementsMatch(expectedAppPoolEnvVars, appPool.Add.EnvironmentVariables.Add, "AppPool EnvironmentVariables don't match!")
-	// 	}
-	// }
+			assert.ElementsMatch(expectedAppPoolEnvVars, appPool.Add.EnvironmentVariables.Add, "AppPool EnvironmentVariables don't match!")
+		}
+	}
 
 	// Verify that site settings match the given config
 	if site, err := getSite(guid, true); err != nil {
@@ -530,7 +531,6 @@ func TestWebsiteWithConfig(t *testing.T) {
 	// Testing if GHA has a slower startup time for IIS websites
 	timeout := time.Now().Add(15 * time.Second)
 	isRunning := false
-	var err error
 	for {
 		isRunning, err = isWebsiteRunning(guid)
 		if err != nil {
