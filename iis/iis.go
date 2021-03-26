@@ -316,6 +316,9 @@ func executeAppCmdWithInput(importXmlPath string, arg ...string) (appCmdResult, 
 	}
 
 	if out, err := cmd.Output(); err != nil {
+
+		fmt.Println("APPCMD ERR: ", err)
+		fmt.Println("APPCMD OUT: ", string(out))
 		// Attempt to parse output for verbose error messages in xml, otherwise return error code
 		// If an appcmd xml is parsed successfully, then accept that as source of error truth
 		if xmlErr := xml.Unmarshal(out, &result); xmlErr == nil {
