@@ -555,7 +555,7 @@ func TestWebsiteWithConfig(t *testing.T) {
 		}()
 
 		b, err := ioutil.ReadAll(file)
-		fmt.Print(b)
+		fmt.Println(string(b))
 		t.Fatal("Website is not started!")
 	}
 
