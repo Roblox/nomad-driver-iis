@@ -7,6 +7,7 @@ job "iis-test" {
 
     network {
       port "httplabel" {}
+      port "httpslabel" {}
     }
 
     restart {
@@ -24,6 +25,12 @@ job "iis-test" {
         bindings {
           type = "http"
           port = "httplabel"
+        }
+
+        bindings {
+          type = "https"
+          port = "httpslabel"
+          cert_name = "WMSVC-SHA2"
         }
       }
 

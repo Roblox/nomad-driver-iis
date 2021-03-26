@@ -90,6 +90,7 @@ var (
 			"ipaddress": hclspec.NewAttr("ipaddress", "string", false),
 			"port":      hclspec.NewAttr("port", "string", true),
 			"type":      hclspec.NewAttr("type", "string", true),
+			"cert_name": hclspec.NewAttr("cert_name", "string", false),
 			"cert_hash": hclspec.NewAttr("cert_hash", "string", false),
 		})),
 	})
@@ -388,6 +389,47 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 					//h.handleError(errMsg, errors.New(errMsg))
 					return nil, nil, fmt.Errorf("Port %s not found, check network stanza", binding.PortLabel)
 				}
+			}
+		}
+	}
+
+	// Validate config bindings for https
+	// First we gather currently installed certs
+	// This may be best lived in iis.go with the bindings code
+	//   For now, it is here as I hack through tests and migrating code to other PRs
+	certs, err := getIISCerts()
+	if err != nil {
+		return nil, nil, fmt.Errorf("Failed to gather installed certs: %v", err)
+	}
+	for i := 0; i < len(iisBindings); i++ {
+		if iisBindings[i].CertHash != "" {
+			// check if cert thumbprint(hash) exists
+			certExists := false
+			for _, cert := range certs {
+				if cert.Thumbprint == iisBindings[i].CertHash {
+					certExists = true
+					break
+				}
+			}
+			if !certExists {
+				return nil, nil, fmt.Errorf("Failed to find cert_hash with thumbprint of '%s'", iisBindings[i].CertHash)
+			}
+		} else if iisBindings[i].CertName != "" {
+			certExists := false
+			var maxExpirationDate time.Time
+			for _, cert := range certs {
+				// Find certs with the same FriendlyName or CN
+				// If there exists a cert with the names we are looking for, then ensure we get the one with the further expiration date
+				if cert.FriendlyName == iisBindings[i].CertName || cert.CN == iisBindings[i].CertName {
+					if maxExpirationDate.Before(cert.NotAfter) {
+						certExists = true
+						maxExpirationDate = cert.NotAfter
+						iisBindings[i].CertHash = cert.Thumbprint
+					}
+				}
+			}
+			if !certExists {
+				return nil, nil, fmt.Errorf("Failed to find cert_hash with name of '%s'", iisBindings[i].CertName)
 			}
 		}
 	}

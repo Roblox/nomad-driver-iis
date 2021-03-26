@@ -20,6 +20,7 @@ package iis
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"os/exec"
@@ -27,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	wmi "github.com/StackExchange/wmi"
 )
@@ -158,6 +160,7 @@ type iisAppPoolIdentity struct {
 
 // IIS Binding struct to match
 type iisBinding struct {
+	CertName  string `codec:"cert_name"`
 	CertHash  string `codec:"cert_hash"`
 	HostName  string `codec:"hostname"`
 	IPAddress string `codec:"ipaddress"`
@@ -1056,6 +1059,27 @@ func getNetshIP(ipAddress string) string {
 	} else {
 		return "0.0.0.0"
 	}
+}
+
+type IISCert struct {
+	CN           string    `json:"CN"`
+	FriendlyName string    `json:"FriendlyName"`
+	NotAfter     time.Time `json:"NotAfter"`
+	Thumbprint   string    `json:"Thumbprint"`
+}
+
+func getIISCerts() ([]IISCert, error) {
+	var certs []IISCert
+	ps_script := `ConvertTo-Json @(Get-ChildItem cert:\LocalMachine\My | select -Property Thumbprint, Subject,FriendlyName, @{name='NotAfter'; expression= {$_.NotAfter.ToString("yyyy-MM-dd'T'HH:mm:ss.fffK")}}, @{name='CN'; expression= {$_.Subject.split(",")[0].Substring(3)}})`
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps_script)
+
+	out, err := cmd.Output()
+	if err != nil {
+		return certs, fmt.Errorf("Failed to gather certs: %+v", err)
+	}
+
+	err = json.Unmarshal(out, &certs)
+	return certs, err
 }
 
 // Binds an appid, ip address, and port to a hash of a pre-existing certificate in the cert store for https protocol IIS binding with netsh

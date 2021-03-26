@@ -10,6 +10,7 @@ job "iis-test" {
         static = 81
       }
       port "httpslabel" {}
+      port "httpslabel2" {}
     }
 
     restart {
@@ -29,6 +30,11 @@ job "iis-test" {
           type = "https"
           port = "httpslabel"
           cert_hash = "854d57551e79656159a0081054fbc08c6c648f86"
+        }
+        bindings {
+          type = "https"
+          port = "httpslabel2"
+          cert_name = "WMSVC-SHA2"
         }
       }
 
