@@ -494,7 +494,7 @@ func TestWebsiteWithConfig(t *testing.T) {
 		assert.Equal(websiteConfig.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
 
 		// These values are supplied by the config.xml that is imported in from test/testapppool.xml and test/testsite.xml
-		assert.Equal("", appPool.RuntimeVersion, "AppPool RuntimeVersion doesn't match!")
+		assert.Equal("v4.0", appPool.RuntimeVersion, "AppPool RuntimeVersion doesn't match!")
 		assert.Equal("Integrated", appPool.PipelineMode, "AppPool PipelineMode doesn't match!")
 
 		// Verify env vars are properly set for both altered and non-altered env vars for IIS 10+
