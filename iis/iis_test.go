@@ -23,6 +23,7 @@ package iis
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"testing"
@@ -34,6 +35,29 @@ import (
 const (
 	guid = "d42d7b18-691b-409a-94fd-4259a2b7e066"
 	hash = "854d57551e79656159a0081054fbc08c6c648f86"
+)
+
+var (
+	websiteConfig = WebsiteConfig{
+		Name: guid,
+		Path: "C:\\inetpub\\wwwroot",
+		Bindings: []iisBinding{
+			{Type: "http", Port: 8080},
+			{Type: "https", Port: 8081, CertHash: hash},
+		},
+		Env: map[string]string{
+			"EXAMPLE_ENV_VAR":     "test123",
+			"EXAMPLE_ENV_VAR_ALT": "test123",
+			"":                    "INVALID",
+			"   ":                 "INVALID_SPACE",
+			" FUN_SPACE ":         "test456",
+		},
+		AppPoolIdentity: iisAppPoolIdentity{
+			Identity: "SpecificUser",
+			Username: "vagrant",
+			Password: "vagrant",
+		},
+	}
 )
 
 // Test the fingerprinting ability of getVersion to ensure it is outputing the proper version format of IIS
@@ -215,7 +239,7 @@ func TestSiteBinding(t *testing.T) {
 	}
 
 	// Create the test site in IIS
-	if err := createSite(guid, "C:\\inetpub\\wwwroot", ""); err != nil {
+	if err := createSite(guid, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -280,45 +304,15 @@ func TestWebsite(t *testing.T) {
 		t.Fatal("Error purging: ", err)
 	}
 
-	// Get parent dir of working dir to get xml file locations
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal("Failed to get parent dir: ", err)
-	}
-	parentDir := filepath.Dir(wd)
-
-	websiteConfig := &WebsiteConfig{
-		Name: guid,
-		Path: "C:\\inetpub\\wwwroot",
-		Bindings: []iisBinding{
-			{Type: "http", Port: 8080},
-			{Type: "https", Port: 8081, CertHash: hash},
-		},
-		Env: map[string]string{
-			"EXAMPLE_ENV_VAR":     "test123",
-			"EXAMPLE_ENV_VAR_ALT": "test123",
-			"":                    "INVALID",
-			"   ":                 "INVALID_SPACE",
-			" FUN_SPACE ":         "test456",
-		},
-		AppPoolIdentity: iisAppPoolIdentity{
-			Identity: "SpecificUser",
-			Username: "vagrant",
-			Password: "vagrant",
-		},
-		AppPoolConfigPath: filepath.Join(parentDir, "test", "testapppool.xml"),
-		SiteConfigPath:    filepath.Join(parentDir, "test", "testsite.xml"),
-	}
-
 	// Create a website with the config and website name
-	if err := createWebsite(websiteConfig); err != nil {
+	if err := createWebsite(&websiteConfig); err != nil {
 		t.Fatal(err)
 	}
 
 	websiteConfig.Env["EXAMPLE_ENV_VAR_ALT"] = "test789"
 
 	// Ensure create website is idempotent
-	if err := createWebsite(websiteConfig); err != nil {
+	if err := createWebsite(&websiteConfig); err != nil {
 		t.Fatal(err)
 	}
 
@@ -329,10 +323,6 @@ func TestWebsite(t *testing.T) {
 		assert.Equal(websiteConfig.AppPoolIdentity.Identity, appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
 		assert.Equal(websiteConfig.AppPoolIdentity.Username, appPool.Add.ProcessModel.Username, "AppPool Identity Username doesn't match!")
 		assert.Equal(websiteConfig.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
-
-		// These values are supplied by the config.xml that is imported in from test/testapppool.xml and test/testsite.xml
-		assert.Equal("", appPool.RuntimeVersion, "AppPool RuntimeVersion doesn't match!")
-		assert.Equal("Integrated", appPool.PipelineMode, "AppPool PipelineMode doesn't match!")
 
 		// Verify env vars are properly set for both altered and non-altered env vars for IIS 10+
 		if iisVersion, err := getVersion(); err != nil {
@@ -372,6 +362,66 @@ func TestWebsite(t *testing.T) {
 		t.Fatal("Website is not started!")
 	}
 
+	// Stop only the site
+	if err := stopSite(guid); err != nil {
+		t.Fatal(err)
+	}
+
+	// Kill all worker processes if they exist
+	if processIDs, err := getWebsiteProcessIdsStr(guid); err != nil {
+		t.Fatal(err)
+	} else if len(processIDs) > 0 {
+		for _, processID := range processIDs {
+			cmd := exec.Command(`C:\Windows\System32\taskkill.exe`, "/PID", processID, "/F")
+			if err := cmd.Run(); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	// Verify that the website is deemed as not running
+	if isRunning, err := isWebsiteRunning(guid); err != nil {
+		t.Fatal(err)
+	} else if isRunning {
+		t.Fatal("Website is still running when Site is stopped!")
+	}
+
+	// Start only the site
+	if err := startSite(guid); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the website is deemed as running again
+	if isRunning, err := isWebsiteRunning(guid); err != nil {
+		t.Fatal(err)
+	} else if !isRunning {
+		t.Fatal("Website is not running when Site was started!")
+	}
+
+	// Stop only the apppool
+	if err := stopAppPool(guid); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the website is deemed as not running
+	if isRunning, err := isWebsiteRunning(guid); err != nil {
+		t.Fatal(err)
+	} else if isRunning {
+		t.Fatal("Website is still running when AppPool is stopped!")
+	}
+
+	// Start only the apppool
+	if err := startAppPool(guid); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the website is deemed as running again
+	if isRunning, err := isWebsiteRunning(guid); err != nil {
+		t.Fatal(err)
+	} else if !isRunning {
+		t.Fatal("Website is not running when AppPool was started!")
+	}
+
 	// Stop the website
 	if err := stopWebsite(guid); err != nil {
 		t.Fatal(err)
@@ -395,6 +445,117 @@ func TestWebsite(t *testing.T) {
 	}
 
 	// Ensure delete website is idempotent
+	if err := deleteWebsite(guid); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the website is deleted
+	if exists, err := doesWebsiteExist(guid); err != nil {
+		t.Fatal(err)
+	} else {
+		assert.False(exists, "Website exists after deletion!")
+	}
+}
+
+// Test website workflow with starter configs
+// Also tests stat collection with the configs enabling autostart for guaranteed worker processes
+func TestWebsiteWithConfig(t *testing.T) {
+	assert := assert.New(t)
+
+	// Clean any pre-existing websites
+	if err := purgeIIS(); err != nil {
+		t.Fatal("Error purging: ", err)
+	}
+
+	// Get parent dir of working dir to get xml file locations
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal("Failed to get parent dir: ", err)
+	}
+	parentDir := filepath.Dir(wd)
+
+	// Set default for appPool's identity here to prevent GHA-Hosted-CI from corrupting applicationHost.config due ot unknown user at time of running
+	websiteConfig.AppPoolIdentity = iisAppPoolIdentity{}
+
+	websiteConfig.AppPoolConfigPath = filepath.Join(parentDir, "test", "testapppool.xml")
+	websiteConfig.SiteConfigPath = filepath.Join(parentDir, "test", "testsite.xml")
+
+	// Create a website with the config and website name
+	if err := createWebsite(&websiteConfig); err != nil {
+		t.Fatal(err)
+	}
+
+	websiteConfig.Env["EXAMPLE_ENV_VAR_ALT"] = "test789"
+
+	// Verify app pool settings match with given config
+	if appPool, err := getAppPool(guid, true); err != nil {
+		t.Fatal("Failed to get Site info!")
+	} else {
+		assert.Equal("ApplicationPoolIdentity", appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
+		assert.Equal(websiteConfig.AppPoolIdentity.Username, appPool.Add.ProcessModel.Username, "AppPool Identity Username doesn't match!")
+		assert.Equal(websiteConfig.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
+
+		// These values are supplied by the config.xml that is imported in from test/testapppool.xml and test/testsite.xml
+		assert.Equal("", appPool.RuntimeVersion, "AppPool RuntimeVersion doesn't match!")
+		assert.Equal("Integrated", appPool.PipelineMode, "AppPool PipelineMode doesn't match!")
+
+		// Verify env vars are properly set for both altered and non-altered env vars for IIS 10+
+		if iisVersion, err := getVersion(); err != nil {
+			t.Fatal(err)
+		} else if iisVersion.Major >= 10 {
+			expectedAppPoolEnvVars := []appPoolAddEnvVar{
+				{Name: "EXAMPLE_ENV_VAR", Value: "test123"},
+				{Name: "EXAMPLE_ENV_VAR_ALT", Value: "test789"},
+				{Name: "FUN_SPACE", Value: "test456"},
+			}
+
+			assert.ElementsMatch(expectedAppPoolEnvVars, appPool.Add.EnvironmentVariables.Add, "AppPool EnvironmentVariables don't match!")
+		}
+	}
+
+	// Verify that site settings match the given config
+	if site, err := getSite(guid, true); err != nil {
+		t.Fatal("Failed to get Site info!")
+	} else {
+		assert.Equal(site.Site.Application.VDirs[0].PhysicalPath, websiteConfig.Path, "Website path doesn't match desired path from config!")
+	}
+
+	// Start the website
+	if err := startWebsite(guid); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the website is running
+	if isRunning, err := isWebsiteRunning(guid); err != nil {
+		t.Fatal(err)
+	} else if !isRunning {
+		t.Fatal("Website is not started!")
+	}
+
+	// Gather stats of the website's worker processes
+	stats, err := getWebsiteStats(guid)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify gathering stats from a running site returns values
+	assert.NotEqual(stats.WorkingSetPrivate, 0, "WorkingSetPrivate returned 0!")
+	assert.NotEqual(stats.KernelModeTime, 0, "KernelModeTime returned 0!")
+	assert.NotEqual(stats.UserModeTime, 0, "UserModeTime returned 0!")
+
+	// Stop the website
+	if err := stopWebsite(guid); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the website is not running
+	if isRunning, err := isWebsiteRunning(guid); err != nil {
+		t.Fatal(err)
+	} else if isRunning {
+		t.Fatal("Website is not stopped!")
+	}
+
+	// Delete the website
 	if err := deleteWebsite(guid); err != nil {
 		t.Fatal(err)
 	}
