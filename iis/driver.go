@@ -20,12 +20,15 @@ package iis
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-hclog"
 	log "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/client/stats"
 	"github.com/hashicorp/nomad/drivers/shared/eventer"
+	shelpers "github.com/hashicorp/nomad/helper/stats"
 	"github.com/hashicorp/nomad/plugins/base"
 	"github.com/hashicorp/nomad/plugins/drivers"
 	"github.com/hashicorp/nomad/plugins/shared/hclspec"
@@ -40,7 +43,7 @@ const (
 
 	// pluginVersion allows the client to identify and use newer versions of
 	// an installed plugin
-	pluginVersion = "0.2.0"
+	pluginVersion = "0.2.2"
 
 	// fingerprintPeriod is the interval at which the plugin will send
 	// fingerprint responses
@@ -88,6 +91,7 @@ var (
 			"ipaddress": hclspec.NewAttr("ipaddress", "string", false),
 			"port":      hclspec.NewAttr("port", "string", true),
 			"type":      hclspec.NewAttr("type", "string", true),
+			"cert_name": hclspec.NewAttr("cert_name", "string", false),
 			"cert_hash": hclspec.NewAttr("cert_hash", "string", false),
 		})),
 	})
@@ -252,7 +256,7 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 	}
 
 	// Check if IIS is running in SC
-	if isRunning, err := isIISRunning(); err != nil {
+	if isRunning, err := IsIISRunning(); err != nil {
 		d.logger.Error("Error in building fingerprint, when trying to get IIS running status: %v", err)
 		fp.Health = drivers.HealthStateUndetected
 		fp.HealthDescription = "Undetected"
@@ -300,10 +304,147 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		userCpuStats:   stats.NewCpuStats(),
 		systemCpuStats: stats.NewCpuStats(),
 		websiteStarted: false,
+		waitCh:         make(chan struct{}),
 	}
 
 	driverState := TaskState{
 		StartedAt: h.startedAt,
+	}
+
+	// Every executor runs this init at creation for stats
+	if err := shelpers.Init(); err != nil {
+		h.logger.Error("unable to initialize stats", "error", err)
+	}
+
+	websiteConfig := WebsiteConfig{
+		Name: h.taskConfig.AllocID,
+		Env:  map[string]string{},
+		AppPoolIdentity: iisAppPoolIdentity{
+			Identity: driverConfig.AppPoolIdentity,
+		},
+		AppPoolConfigPath: driverConfig.AppPoolConfigPath,
+		SiteConfigPath:    driverConfig.SiteConfigPath,
+	}
+
+	// Setup environment variables.
+	// NOMAD_APPPOOL_* are keywords for applying user/pass info for a given Application Pool in a secure manner
+	for key, val := range h.taskConfig.Env {
+		switch key {
+		case "NOMAD_APPPOOL_USERNAME":
+			websiteConfig.AppPoolIdentity.Identity = "SpecificUser"
+			websiteConfig.AppPoolIdentity.Username = val
+		case "NOMAD_APPPOOL_PASSWORD":
+			websiteConfig.AppPoolIdentity.Password = val
+		default:
+			websiteConfig.Env[key] = val
+		}
+	}
+
+	if !filepath.IsAbs(driverConfig.Path) {
+		websiteConfig.Path = filepath.Join(h.taskConfig.TaskDir().Dir, driverConfig.Path)
+	} else {
+		websiteConfig.Path = driverConfig.Path
+	}
+
+	var iisBindings []iisBinding
+	// If any bindings were specified, we move forward with port label cross lookups
+	if len(driverConfig.Bindings) > 0 {
+		if h.taskConfig.Resources.Ports != nil {
+			// parse group/shared resource ports. This is the preferred route for establishing network ports
+			// here is the relevant PR for the docker driver that drove this change: https://github.com/hashicorp/nomad/pull/8623
+
+			for _, binding := range driverConfig.Bindings {
+				if port, ok := h.taskConfig.Resources.Ports.Get(binding.PortLabel); ok {
+					binding.Port = port.Value
+					iisBindings = append(iisBindings, binding)
+				} else {
+					// errMsg := fmt.Sprintf("Port %s not found, check network stanza", binding.PortLabel)
+					// h.handleError(errMsg, errors.New(errMsg))
+					// return
+					return nil, nil, fmt.Errorf("Port %s not found, check network stanza", binding.PortLabel)
+				}
+			}
+		} else if len(h.taskConfig.Resources.NomadResources.Networks) > 0 {
+			// parses a task's network stanza for dynamic/static ports
+			// this is deprecated as of Nomad v1.0+, in time this should be removed
+			// just like the docker driver, you can only work with one network stanza format over another
+
+			for _, binding := range driverConfig.Bindings {
+				foundPort := false
+				for _, network := range h.taskConfig.Resources.NomadResources.Networks {
+
+					for _, port := range network.ReservedPorts {
+						binding.Port = port.Value
+						iisBindings = append(iisBindings, binding)
+						foundPort = true
+					}
+
+					for _, port := range network.DynamicPorts {
+						binding.Port = port.Value
+						iisBindings = append(iisBindings, binding)
+						foundPort = true
+					}
+				}
+				if !foundPort {
+					//errMsg := fmt.Sprintf("Port %s not found, check network stanza", binding.PortLabel)
+					//h.handleError(errMsg, errors.New(errMsg))
+					return nil, nil, fmt.Errorf("Port %s not found, check network stanza", binding.PortLabel)
+				}
+			}
+		}
+	}
+
+	// Validate config bindings for https
+	// First we gather currently installed certs
+	// This may be best lived in iis.go with the bindings code
+	//   For now, it is here as I hack through tests and migrating code to other PRs
+	certs, err := getIISCerts()
+	if err != nil {
+		return nil, nil, fmt.Errorf("Failed to gather installed certs: %v", err)
+	}
+	for i := 0; i < len(iisBindings); i++ {
+		if iisBindings[i].CertHash != "" {
+			// check if cert thumbprint(hash) exists
+			certExists := false
+			for _, cert := range certs {
+				if strings.EqualFold(cert.Thumbprint, iisBindings[i].CertHash) {
+					certExists = true
+					break
+				}
+			}
+			if !certExists {
+				return nil, nil, fmt.Errorf("Failed to find cert_hash with thumbprint of '%s'", iisBindings[i].CertHash)
+			}
+		} else if iisBindings[i].CertName != "" {
+			certExists := false
+			var maxExpirationDate time.Time
+			for _, cert := range certs {
+				// Find certs with the same FriendlyName or CN
+				// If there exists a cert with the names we are looking for, then ensure we get the one with the further expiration date
+				if cert.FriendlyName == iisBindings[i].CertName || cert.CN == iisBindings[i].CertName {
+					if maxExpirationDate.Before(cert.NotAfter) {
+						certExists = true
+						maxExpirationDate = cert.NotAfter
+						iisBindings[i].CertHash = cert.Thumbprint
+					}
+				}
+			}
+			if !certExists {
+				return nil, nil, fmt.Errorf("Failed to find cert_hash with name of '%s'", iisBindings[i].CertName)
+			}
+		}
+	}
+
+	websiteConfig.Bindings = iisBindings
+
+	if err := CreateWebsite(&websiteConfig); err != nil {
+		d.logger.Error("Error in creating website: ", err)
+		return nil, nil, err
+	}
+
+	if err := StartWebsite(websiteConfig.Name); err != nil {
+		d.logger.Error("Error in starting website: ", err)
+		return nil, nil, err
 	}
 
 	if err := handle.SetDriverState(&driverState); err != nil {
@@ -311,7 +452,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	}
 
 	d.tasks.Set(cfg.ID, h)
-	go h.run(&driverConfig)
+	go h.run()
 	return handle, nil, nil
 }
 
@@ -331,10 +472,10 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		return fmt.Errorf("failed to decode task state from handle: %v", err)
 	}
 
-	var driverConfig TaskConfig
-	if err := handle.Config.DecodeDriverConfig(&driverConfig); err != nil {
-		return fmt.Errorf("failed to decode driver config: %v", err)
-	}
+	// var driverConfig TaskConfig
+	// if err := handle.Config.DecodeDriverConfig(&driverConfig); err != nil {
+	// 	return fmt.Errorf("failed to decode driver config: %v", err)
+	// }
 
 	h := &taskHandle{
 		taskConfig:     handle.Config,
@@ -346,11 +487,12 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		userCpuStats:   stats.NewCpuStats(),
 		systemCpuStats: stats.NewCpuStats(),
 		websiteStarted: false,
+		waitCh:         make(chan struct{}),
 	}
 
 	d.tasks.Set(handle.Config.ID, h)
 
-	go h.run(&driverConfig)
+	go h.run()
 	d.logger.Info("win_iis task driver: Task recovered successfully.")
 	return nil
 }
@@ -369,36 +511,12 @@ func (d *Driver) WaitTask(ctx context.Context, taskID string) (<-chan *drivers.E
 
 func (d *Driver) handleWait(ctx context.Context, handle *taskHandle, ch chan *drivers.ExitResult) {
 	defer close(ch)
-	var result *drivers.ExitResult
-
-	// Blocker code to monitor current task running status.
-	// On IIS task not running, set driver exit result and return.
-	for {
-		if handle.websiteStarted {
-			isRunning, err := isWebsiteRunning(handle.taskConfig.AllocID)
-			if err != nil {
-				result = &drivers.ExitResult{
-					Err: fmt.Errorf("executor: error waiting on process: %v", err),
-				}
-				break
-			}
-			if !isRunning {
-				result = &drivers.ExitResult{
-					ExitCode: 0,
-				}
-				break
-			}
-		}
-		time.Sleep(time.Second * 5)
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-d.ctx.Done():
-			return
-		case ch <- result:
+	select {
+	case <-handle.waitCh:
+		ch <- handle.ExitResult()
+	case <-ctx.Done():
+		ch <- &drivers.ExitResult{
+			Err: ctx.Err(),
 		}
 	}
 }

@@ -12,8 +12,18 @@ jobs:
     runs-on: windows-2016
     steps:
       - uses: actions/checkout@v2
-      - name: Install Prerequisites (PFX, IIS)
-        run: Import-PfxCertificate -FilePath .\test\test.pfx -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
+      - name: Build Driver
+        run: go build -o win_iis.exe .
+      - name: Install Prerequisites
         shell: powershell
+        run: .\scripts\win_provision.ps1
+      # - name: Install Nomad
+      #   run: choco install nomad 1.0.4
+      # - name: 
+      # - name: Install Prerequisites (PFX, IIS)
+      #   run: Import-PfxCertificate -FilePath .\test\test.pfx -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
+        # shell: powershell
       - name: Run iis-driver integration tests
         run: go test ./iis/ -count=1 -v
+      - name: Run iis-driver end to end tests
+        run: go test ./test/e2e -count=1 -v
