@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-hclog"
@@ -255,7 +256,7 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 	}
 
 	// Check if IIS is running in SC
-	if isRunning, err := isIISRunning(); err != nil {
+	if isRunning, err := IsIISRunning(); err != nil {
 		d.logger.Error("Error in building fingerprint, when trying to get IIS running status: %v", err)
 		fp.Health = drivers.HealthStateUndetected
 		fp.HealthDescription = "Undetected"
@@ -406,7 +407,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 			// check if cert thumbprint(hash) exists
 			certExists := false
 			for _, cert := range certs {
-				if cert.Thumbprint == iisBindings[i].CertHash {
+				if strings.EqualFold(cert.Thumbprint, iisBindings[i].CertHash) {
 					certExists = true
 					break
 				}
@@ -436,12 +437,12 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 
 	websiteConfig.Bindings = iisBindings
 
-	if err := createWebsite(&websiteConfig); err != nil {
+	if err := CreateWebsite(&websiteConfig); err != nil {
 		d.logger.Error("Error in creating website: ", err)
 		return nil, nil, err
 	}
 
-	if err := startWebsite(websiteConfig.Name); err != nil {
+	if err := StartWebsite(websiteConfig.Name); err != nil {
 		d.logger.Error("Error in starting website: ", err)
 		return nil, nil, err
 	}

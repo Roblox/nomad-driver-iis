@@ -45,24 +45,6 @@ type WebsiteConfig struct {
 	SiteConfigPath    string
 }
 
-// Application schema given from appcmd.exe
-type appCmdApp struct {
-	Name         string          `xml:"APP.NAME,attr"`
-	AppPoolName  string          `xml:"APPPOOL.NAME,attr"`
-	SiteName     string          `xml:"SITE.NAME,attr"`
-	Path         string          `xml:"path,attr"`
-	Applications siteApplication `xml:"application"`
-}
-
-// Virtual Directory schema given from appcmd.exe
-type appCmdVDir struct {
-	Name         string     `xml:"VDIR.NAME,attr"`
-	AppName      string     `xml:"APP.NAME,attr"`
-	PhysicalPath string     `xml:"physicalPath,attr"`
-	Path         string     `xml:"path,attr"`
-	VDirs        []siteVDir `xml:"virtualDirectory"`
-}
-
 // Application Pool schema given from appcmd.exe
 type appCmdAppPool struct {
 	Name           string     `xml:"APPPOOL.NAME,attr"`
@@ -188,14 +170,14 @@ type iisBinding struct {
 }
 
 // Stat fields that are unmarshalled from WMI
-type wmiProcessStats struct {
+type WmiProcessStats struct {
 	KernelModeTime    uint64
 	UserModeTime      uint64
 	WorkingSetPrivate uint64
 }
 
 // A Version Struct to parse IIS Version strings for granular control with features.
-type iisVersion struct {
+type IISVersion struct {
 	Major    int
 	Minor    int
 	Build    int
@@ -217,7 +199,7 @@ func getVersionStr() (string, error) {
 }
 
 // Gets a version object of InetMgr.exe which parses major.minor.build.revision string
-func getVersion() (*iisVersion, error) {
+func GetVersion() (*IISVersion, error) {
 	versionStr, err := getVersionStr()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get version string for iisVersion parsing: %v", err)
@@ -227,7 +209,7 @@ func getVersion() (*iisVersion, error) {
 	if len(versionNumbers) != 4 {
 		return nil, fmt.Errorf("Format of IIS version is improper. It must have \"major.minor.build.revision\" format")
 	}
-	version := &iisVersion{}
+	version := &IISVersion{}
 
 	major, err := strconv.Atoi(versionNumbers[0])
 	if err != nil {
@@ -257,7 +239,7 @@ func getVersion() (*iisVersion, error) {
 }
 
 // Returns if the IIS service is running in Windows Service Controller (SC)
-func isIISRunning() (bool, error) {
+func IsIISRunning() (bool, error) {
 	cmd := exec.Command(`C:\Windows\System32\sc.exe`, "query", "w3svc")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return false, err
@@ -267,7 +249,7 @@ func isIISRunning() (bool, error) {
 }
 
 // Removes all Application Pools and Sites from IIS
-func purgeIIS() error {
+func PurgeIIS() error {
 	if sites, err := getSites(); err != nil {
 		return err
 	} else {
@@ -290,8 +272,8 @@ func purgeIIS() error {
 }
 
 // Starts the IIS service in Windows SC
-func startIIS() error {
-	if isRunning, err := isIISRunning(); err != nil || isRunning {
+func StartIIS() error {
+	if isRunning, err := IsIISRunning(); err != nil || isRunning {
 		return err
 	}
 
@@ -303,8 +285,8 @@ func startIIS() error {
 }
 
 // Stops the IIS service in Windows SC
-func stopIIS() error {
-	if isRunning, err := isIISRunning(); err != nil || !isRunning {
+func StopIIS() error {
+	if isRunning, err := IsIISRunning(); err != nil || !isRunning {
 		return err
 	}
 
@@ -350,104 +332,6 @@ func executeAppCmdWithInput(importXmlPath string, arg ...string) (appCmdResult, 
 	}
 }
 
-func createApplication(siteName string, path string) error {
-	if exists, err := doesApplicationExist(siteName, path); err != nil || exists {
-		return err
-	}
-
-	properties := []string{"add", "app", fmt.Sprintf("/site.name:%s", siteName), fmt.Sprintf("/path:%s", path)}
-	if _, err := executeAppCmd(properties...); err != nil {
-		return fmt.Errorf("Failed to create Application: %v", err)
-	}
-
-	return nil
-}
-
-// Returns if an Application Pool with the given name exists in IIS
-func doesApplicationExist(siteName string, path string) (bool, error) {
-	if app, err := getApplication(siteName, path, false); err != nil || app == nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
-// Returns an Application Pool with the given name
-func getApplication(siteName string, path string, allConfigs bool) (*appCmdApp, error) {
-	args := []string{"list", "app", siteName + path}
-	if allConfigs {
-		args = append(args, "/config:*")
-	}
-
-	if result, err := executeAppCmd(args...); err != nil {
-		return nil, fmt.Errorf("Failed to get Application: %v", err)
-	} else if len(result.Apps) == 0 {
-		return nil, nil
-	} else {
-		return &result.Apps[0], nil
-	}
-}
-
-func getValidVDirAppName(appName string) string {
-	if !strings.Contains(appName, "/") {
-		return appName + "/"
-	}
-	return appName
-}
-
-func createVDir(appName string, path string) error {
-	if exists, err := doesVDirExist(appName, path); err != nil || exists {
-		return err
-	}
-
-	// A "/"" must exist somewhere in the app name to append a vdir to it.
-	// if none are provided, append "/" to the end of the app name as default.
-	validAppName := getValidVDirAppName(appName)
-
-	properties := []string{"add", "vdir", fmt.Sprintf("/app.name:%s", validAppName), fmt.Sprintf("/path:%s", path)}
-	if _, err := executeAppCmd(properties...); err != nil {
-		return fmt.Errorf("Failed to create Virtual Directory: %v", err)
-	}
-
-	return nil
-}
-
-// Returns if an Application Pool with the given name exists in IIS
-func doesVDirExist(appName string, path string) (bool, error) {
-	if app, err := getVDir(appName, path, false); err != nil || app == nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
-// Returns an Application Pool with the given name
-func getVDir(appName string, path string, allConfigs bool) (*appCmdVDir, error) {
-
-	args := []string{"list", "vdir", appName + path}
-	if allConfigs {
-		args = append(args, "/config:*")
-	}
-
-	if result, err := executeAppCmd(args...); err != nil {
-		return nil, fmt.Errorf("Failed to get Virtual Directory: %v", err)
-	} else if len(result.VDirs) == 0 {
-		return nil, nil
-	} else {
-		return &result.VDirs[0], nil
-	}
-}
-
-// Returns an Application Pool with the given name
-func setVDir(appName string, path string, physicalPath string) error {
-	properties := []string{"set", "vdir", appName + path, fmt.Sprintf("-physicalPath:%s", physicalPath)}
-	if _, err := executeAppCmd(properties...); err != nil {
-		return fmt.Errorf("Failed to set Virtual Directory: %v", err)
-	}
-
-	return nil
-}
-
 // Applies the Application Pool identity user settings
 func applyAppPoolIdentity(appPoolName string, appPoolIdentity iisAppPoolIdentity) error {
 	properties := []string{"set", "config", "/section:applicationPools"}
@@ -476,14 +360,14 @@ func applyAppPoolEnvVars(appPoolName string, envVars map[string]string) error {
 		return nil
 	}
 
-	if iisVersion, err := getVersion(); err != nil {
+	if iisVersion, err := GetVersion(); err != nil {
 		return err
 	} else if iisVersion.Major < 10 {
 		// Default behavior for older versions of IIS does not accept env vars
 		return nil
 	}
 
-	appPool, err := getAppPool(appPoolName, true)
+	appPool, err := GetAppPool(appPoolName, true)
 	if err != nil || appPool == nil {
 		return err
 	}
@@ -562,7 +446,7 @@ func deleteAppPoolEnvVar(appPoolName string, key string) error {
 
 // Returns if an Application Pool with the given name exists in IIS
 func doesAppPoolExist(appPoolName string) (bool, error) {
-	if appPool, err := getAppPool(appPoolName, false); err != nil || appPool == nil {
+	if appPool, err := GetAppPool(appPoolName, false); err != nil || appPool == nil {
 		return false, err
 	}
 	return true, nil
@@ -584,7 +468,7 @@ func doesAppPoolEnvVarExistWithSameValue(appPool *appCmdAppPool, key string, val
 }
 
 // Returns an Application Pool with the given name
-func getAppPool(appPoolName string, allConfigs bool) (*appCmdAppPool, error) {
+func GetAppPool(appPoolName string, allConfigs bool) (*appCmdAppPool, error) {
 	args := []string{"list", "apppool", appPoolName}
 	if allConfigs {
 		args = append(args, "/config:*")
@@ -610,7 +494,7 @@ func getAppPools() ([]appCmdAppPool, error) {
 
 // Returns if an Application Pool with the given name is started in IIS
 func isAppPoolStarted(appPoolName string) (bool, error) {
-	if appPool, err := getAppPool(appPoolName, false); err != nil || appPool == nil {
+	if appPool, err := GetAppPool(appPoolName, false); err != nil || appPool == nil {
 		return false, err
 	} else {
 		return strings.ToLower(appPool.State) == "started", nil
@@ -645,7 +529,7 @@ func stopAppPool(appPoolName string) error {
 
 // Applies the Site bindings
 func applySiteBindings(siteName string, bindings []iisBinding) error {
-	site, err := getSite(siteName, false)
+	site, err := GetSite(siteName, false)
 	if err != nil {
 		return err
 	}
@@ -764,7 +648,7 @@ func deleteSite(siteName string) error {
 
 // Returns if a Site with the given name exists in IIS
 func doesSiteExist(siteName string) (bool, error) {
-	if site, err := getSite(siteName, false); err != nil || site == nil {
+	if site, err := GetSite(siteName, false); err != nil || site == nil {
 		return false, err
 	}
 
@@ -801,7 +685,7 @@ func (site *appCmdSite) getBindings() ([]iisBinding, error) {
 }
 
 // Returns a Site with the given name
-func getSite(siteName string, allConfigs bool) (*appCmdSite, error) {
+func GetSite(siteName string, allConfigs bool) (*appCmdSite, error) {
 	args := []string{"list", "site", siteName}
 	if allConfigs {
 		args = append(args, "/config:*")
@@ -827,7 +711,7 @@ func getSites() ([]appCmdSite, error) {
 
 // Returns if a Site with the given name is started in IIS
 func isSiteStarted(siteName string) (bool, error) {
-	if site, err := getSite(siteName, false); err != nil || site == nil {
+	if site, err := GetSite(siteName, false); err != nil || site == nil {
 		return false, err
 	} else {
 		return strings.ToLower(site.State) == "started", nil
@@ -970,7 +854,7 @@ func setVDir(appName string, path string, physicalPath string) error {
 }
 
 // Creates an Application Pool and Site with the given configuration
-func createWebsite(websiteConfig *WebsiteConfig) error {
+func CreateWebsite(websiteConfig *WebsiteConfig) error {
 	mux.Lock()
 	defer mux.Unlock()
 
@@ -1007,7 +891,7 @@ func createWebsite(websiteConfig *WebsiteConfig) error {
 }
 
 // Deletes an Application Pool and Site with the given name
-func deleteWebsite(websiteName string) error {
+func DeleteWebsite(websiteName string) error {
 	if err := deleteSite(websiteName); err != nil {
 		return err
 	}
@@ -1015,7 +899,7 @@ func deleteWebsite(websiteName string) error {
 }
 
 // Returns if both Application Pool and Site exist with the given name
-func doesWebsiteExist(websiteName string) (bool, error) {
+func DoesWebsiteExist(websiteName string) (bool, error) {
 	if exists, err := doesAppPoolExist(websiteName); err != nil || !exists {
 		return false, err
 	}
@@ -1071,14 +955,14 @@ type win32Process struct {
 }
 
 // Gets the WMI CPU and Memory stats of a given website
-func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
+func GetWebsiteStats(websiteName string) (*WmiProcessStats, error) {
 	// Get a list of process ids tied to the app pool
 	processIds, err := getWebsiteProcessIdsStr(websiteName)
 	if err != nil {
 		return nil, err
 	}
 
-	stats := &wmiProcessStats{
+	stats := &WmiProcessStats{
 		WorkingSetPrivate: 0,
 		KernelModeTime:    0,
 		UserModeTime:      0,
@@ -1123,7 +1007,7 @@ func getWebsiteStats(websiteName string) (*wmiProcessStats, error) {
 	return stats, nil
 }
 
-func isWebsiteStarted(websiteName string) (bool, error) {
+func IsWebsiteStarted(websiteName string) (bool, error) {
 	if isStarted, err := isAppPoolStarted(websiteName); err != nil || !isStarted {
 		return false, err
 	}
@@ -1135,7 +1019,7 @@ func isWebsiteStarted(websiteName string) (bool, error) {
 }
 
 // Returns if the Application Pool has running processes or both Application Pool and Site are started with the given name
-func isWebsiteRunning(websiteName string) (bool, error) {
+func IsWebsiteRunning(websiteName string) (bool, error) {
 	processIds, err := getWebsiteProcessIdsStr(websiteName)
 	if err != nil {
 		return false, err
@@ -1144,7 +1028,7 @@ func isWebsiteRunning(websiteName string) (bool, error) {
 		return true, nil
 	}
 
-	if isRunning, err := isWebsiteStarted(websiteName); err != nil || !isRunning {
+	if isRunning, err := IsWebsiteStarted(websiteName); err != nil || !isRunning {
 		return false, err
 	}
 
@@ -1152,7 +1036,7 @@ func isWebsiteRunning(websiteName string) (bool, error) {
 }
 
 // Starts both Application Pool and Site with the given name
-func startWebsite(websiteName string) error {
+func StartWebsite(websiteName string) error {
 	if err := startAppPool(websiteName); err != nil {
 		return err
 	}
@@ -1160,7 +1044,7 @@ func startWebsite(websiteName string) error {
 }
 
 // Stops both Application Pool and Site with the given name
-func stopWebsite(websiteName string) error {
+func StopWebsite(websiteName string) error {
 	if err := stopSite(websiteName); err != nil {
 		return err
 	}

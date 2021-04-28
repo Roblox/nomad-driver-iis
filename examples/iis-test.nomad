@@ -11,10 +11,7 @@ job "iis-test" {
     }
 
     restart {
-      attempts = 10
-      interval = "5m"
-      delay = "25s"
-      mode = "delay"
+      attempts = 0
     }
 
     task "iis-test" {

@@ -76,7 +76,7 @@ func (h *taskHandle) IsRunning() bool {
 
 func (h *taskHandle) run() {
 	// for {
-	// 	if isRunning, err := isWebsiteRunning(h.taskConfig.AllocID); err != nil {
+	// 	if isRunning, err := IsWebsiteRunning(h.taskConfig.AllocID); err != nil {
 	// 		h.logger.Error("failed to wait for website; already terminated")
 	// 	} else if !isRunning {
 	// 		h.procState = drivers.TaskStateExited
@@ -90,7 +90,7 @@ func (h *taskHandle) run() {
 	var isRunning bool
 	var err error
 	for {
-		isRunning, err = isWebsiteRunning(h.taskConfig.AllocID)
+		isRunning, err = IsWebsiteRunning(h.taskConfig.AllocID)
 		if err != nil || !isRunning {
 			// result = &drivers.ExitResult{
 			// 	Err: fmt.Errorf("executor: error waiting on process: %v", err),
@@ -146,7 +146,7 @@ func (h *taskHandle) handleStats(ch chan *drivers.TaskResourceUsage, ctx context
 		}
 
 		// Get IIS Worker Process stats if we can.
-		stats, err := getWebsiteStats(h.taskConfig.AllocID)
+		stats, err := GetWebsiteStats(h.taskConfig.AllocID)
 		if err != nil {
 			h.logger.Error("Failed to get iis worker process stats:", "error", err)
 			return
@@ -161,7 +161,7 @@ func (h *taskHandle) handleStats(ch chan *drivers.TaskResourceUsage, ctx context
 }
 
 // Convert IIS WMI Tasks Info to driver TaskResourceUsage expected input
-func (h *taskHandle) getTaskResourceUsage(stats *wmiProcessStats) *drivers.TaskResourceUsage {
+func (h *taskHandle) getTaskResourceUsage(stats *WmiProcessStats) *drivers.TaskResourceUsage {
 	totalPercent := h.totalCpuStats.Percent(float64(stats.KernelModeTime + stats.UserModeTime))
 	cs := &drivers.CpuStats{
 		SystemMode: h.systemCpuStats.Percent(float64(stats.KernelModeTime)),
@@ -190,18 +190,18 @@ func (h *taskHandle) shutdown(timeout time.Duration) error {
 	h.stateLock.Lock()
 	defer h.stateLock.Unlock()
 
-	if err := stopWebsite(h.taskConfig.AllocID); err != nil {
+	if err := StopWebsite(h.taskConfig.AllocID); err != nil {
 		return err
 	}
 
-	// Sleep for timeout duration to allow stopWebsite to finish gracefully.
+	// Sleep for timeout duration to allow StopWebsite to finish gracefully.
 	time.Sleep(timeout)
 
 	return nil
 }
 
 func (h *taskHandle) cleanup() error {
-	err := deleteWebsite(h.taskConfig.AllocID)
+	err := DeleteWebsite(h.taskConfig.AllocID)
 	if err != nil {
 		return fmt.Errorf("Error in destroying website: %v", err)
 	}
