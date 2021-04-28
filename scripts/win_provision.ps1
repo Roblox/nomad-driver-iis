@@ -1,4 +1,5 @@
 Set-ExecutionPolicy Bypass -Scope Process -Force
+if($env:CI -ne 'true') { Set-Location -Path 'C:\\vagrant' }
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
 Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
 
@@ -11,10 +12,10 @@ Stop-Service nomad
 Get-CimInstance win32_service -filter "name='nomad'" | Invoke-CimMethod -Name Change -Arguments @{StartName="LocalSystem"} | Out-Null
 $nomadDir = "C:\\ProgramData\\nomad"
 New-Item -ItemType Directory -Path "$nomadDir\\plugin" -Force
-Copy-Item "C:\\vagrant\\win_iis.exe" -Destination "$nomadDir\\plugin" -Force
-Copy-Item "C:\\vagrant\\test\\win_client.hcl" -Destination "$nomadDir\\conf\\client.hcl" -Force
+Copy-Item ".\\win_iis.exe" -Destination "$nomadDir\\plugin" -Force
+Copy-Item ".\\test\\win_client.hcl" -Destination "$nomadDir\\conf\\client.hcl" -Force
 Start-Service nomad
 
-Import-PfxCertificate -FilePath "C:\\vagrant\\test\\test.pfx" -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
+Import-PfxCertificate -FilePath ".\\test\\test.pfx" -CertStoreLocation Cert:\\LocalMachine\\My -Password (ConvertTo-SecureString -String 'Test123!' -AsPlainText -Force)
 
 Install-WindowsFeature -Name Web-Server -IncludeAllSubFeature -IncludeManagementTools -Restart
