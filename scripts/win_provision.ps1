@@ -13,7 +13,7 @@ Stop-Service consul
 Get-CimInstance win32_service -filter "name='consul'" | Invoke-CimMethod -Name Change -Arguments @{StartName="LocalSystem"} | Out-Null
 $consulDir = "C:\\ProgramData\\consul"
 New-Item -ItemType Directory -Path "$consulDir\\data" -Force
-Copy-Item "C:\\vagrant\\vagrant\\consul.json" -Destination "$consulDir\\conf\\consul.json" -Force
+Copy-Item "C:\\vagrant\\vagrant\\consul.json" -Destination "$consulDir\\config\\consul.json" -Force
 Start-Service consul
 
 Get-CimInstance win32_service -filter "name='nomad'" | Invoke-CimMethod -Name Change -Arguments @{StartName="LocalSystem"} | Out-Null
