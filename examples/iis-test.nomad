@@ -15,12 +15,9 @@ job "iis-test" {
 
       artifact {
         source = "https://github.com/iamabhishek-dubey/nomad-driver-iis/releases/download/v0.4/test-hello-world.zip"
-        options {
-          archive = true
-        }
       }
       config {
-        path = "${NOMAD_TASKS_DIR}\\netcoreapp2.1"
+        path = "${NOMAD_TASK_DIR}\\netcoreapp2.1"
 
         apppool_identity {
           identity = "NetworkService"
