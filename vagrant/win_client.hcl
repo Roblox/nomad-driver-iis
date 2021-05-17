@@ -5,6 +5,10 @@ log_level = "INFO"
 data_dir = "C:\\ProgramData\\nomad\\data"
 plugin_dir = "C:\\ProgramData\\nomad\\plugin"
 
+consul {
+  address = "localhost:8500"
+}
+
 # Enable server mode
 server {
   enabled = true

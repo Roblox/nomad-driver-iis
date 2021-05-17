@@ -13,13 +13,19 @@ job "iis-test" {
     task "iis-test" {
       driver = "win_iis"
 
-      config {
-        path = "C:\\inetpub\\wwwroot"
-        apppool_identity {
-          identity="SpecificUser"
-          username="vagrant"
-          password="vagrant"
+      artifact {
+        source = "https://github.com/iamabhishek-dubey/nomad-driver-iis/releases/download/v0.4/test-hello-world.zip"
+        options {
+          archive = true
         }
+      }
+      config {
+        path = "${NOMAD_TASKS_DIR}\\netcoreapp2.1"
+
+        apppool_identity {
+          identity = "NetworkService"
+        }
+
         bindings {
           type = "http"
           resource_port = "httplabel"
@@ -30,6 +36,16 @@ job "iis-test" {
         memory = 20
         network {
           port "httplabel" {}
+        }
+      }
+      service {
+        name = "iis-test"
+        tags = ["iis-test", "windows-iis-test"]
+        port = "httplabel"
+        check {
+          type = "tcp"
+          interval = "10s"
+          timeout = "2s"
         }
       }
     }
