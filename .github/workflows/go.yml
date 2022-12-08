@@ -6,6 +6,8 @@ name: Go
 on:
   push:
     branches: [ "master" ]
+  release:
+    types: [published]
   pull_request:
     branches: [ "master" ]
 
@@ -23,3 +25,11 @@ jobs:
 
     - name: Build
       run: make build
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/v')
+      with:
+        files: "*.exe"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
