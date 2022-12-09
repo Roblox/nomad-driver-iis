@@ -1,4 +1,4 @@
-job "iis-test" {
+job "user-test" {
   datacenters = ["dc1"]
   type = "service"
 
@@ -6,8 +6,9 @@ job "iis-test" {
     count = 1
 
     network {
-      port "httplabel" {}
-      port "httpslabel" {}
+      port "httplabel" {
+        static = 81
+      }
     }
 
     restart {
@@ -23,23 +24,15 @@ job "iis-test" {
           type = "http"
           port = "httplabel"
         }
-
-        bindings {
-          type = "https"
-          port = "httpslabel"
-          cert_name = "WMSVC-SHA2"
-        }
       }
 
       template {
+        destination = "secrets/file.env"
+        env         = true
         data = <<EOH
 NOMAD_APPPOOL_USERNAME=vagrant
 NOMAD_APPPOOL_PASSWORD=vagrant
-EXAMPLE_ENV_VAR=test123
 EOH
-
-        destination = "secrets/file.env"
-        env         = true
       }
 
       resources {

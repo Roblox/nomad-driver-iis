@@ -60,7 +60,7 @@ var (
 	}
 )
 
-// Test the fingerprinting ability of getVersion to ensure it is outputing the proper version format of IIS
+// Test the fingerprinting ability of GetVersion to ensure it is outputing the proper version format of IIS
 func TestIISVersion(t *testing.T) {
 	version, err := getVersionStr()
 	if err != nil {
@@ -76,7 +76,7 @@ func TestIISVersion(t *testing.T) {
 
 // Test to ensure IIS functions for altering IIS's state works for other functional/integration tests
 func TestIISRunning(t *testing.T) {
-	if err := stopIIS(); err != nil {
+	if err := StopIIS(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -86,7 +86,7 @@ func TestIISRunning(t *testing.T) {
 		isRunning := true
 
 		for isRunning {
-			if running, err := isIISRunning(); err != nil {
+			if running, err := IsIISRunning(); err != nil {
 				t.Fatal(err)
 			} else {
 				isRunning = running
@@ -107,7 +107,7 @@ func TestIISRunning(t *testing.T) {
 		t.Fatal("Timeout: IIS failed to stop in a reasonable time!")
 	}
 
-	if err := startIIS(); err != nil {
+	if err := StartIIS(); err != nil {
 		t.Fatal("Error trying to start IIS!")
 	}
 
@@ -116,7 +116,7 @@ func TestIISRunning(t *testing.T) {
 		isRunning := false
 
 		for !isRunning {
-			if running, err := isIISRunning(); err != nil {
+			if running, err := IsIISRunning(); err != nil {
 				t.Fatal(err)
 			} else {
 				isRunning = running
@@ -191,7 +191,7 @@ func TestSSLBinding(t *testing.T) {
 
 // Helper function for verify iis bindings match
 func doBindingsMatchSite(t *testing.T, expected []iisBinding, siteName string) bool {
-	site, err := getSite(guid, true)
+	site, err := GetSite(guid, true)
 	if err != nil {
 		t.Fatal(err)
 	} else if site == nil {
@@ -234,7 +234,7 @@ func doBindingsMatchSite(t *testing.T, expected []iisBinding, siteName string) b
 // Test various bindings that could be applied to a Site
 func TestSiteBinding(t *testing.T) {
 	// Clean up pre-exisint IIS sites
-	if err := purgeIIS(); err != nil {
+	if err := PurgeIIS(); err != nil {
 		t.Fatal("Error purging: ", err)
 	}
 
@@ -300,24 +300,24 @@ func TestWebsite(t *testing.T) {
 	assert := assert.New(t)
 
 	// Clean any pre-existing websites
-	if err := purgeIIS(); err != nil {
+	if err := PurgeIIS(); err != nil {
 		t.Fatal("Error purging: ", err)
 	}
 
 	// Create a website with the config and website name
-	if err := createWebsite(&websiteConfig); err != nil {
+	if err := CreateWebsite(&websiteConfig); err != nil {
 		t.Fatal(err)
 	}
 
 	websiteConfig.Env["EXAMPLE_ENV_VAR_ALT"] = "test789"
 
 	// Ensure create website is idempotent
-	if err := createWebsite(&websiteConfig); err != nil {
+	if err := CreateWebsite(&websiteConfig); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify app pool settings match with given config
-	if appPool, err := getAppPool(guid, true); err != nil {
+	if appPool, err := GetAppPool(guid, true); err != nil {
 		t.Fatal("Failed to get Site info!")
 	} else {
 		assert.Equal(websiteConfig.AppPoolIdentity.Identity, appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
@@ -325,7 +325,7 @@ func TestWebsite(t *testing.T) {
 		assert.Equal(websiteConfig.AppPoolIdentity.Password, appPool.Add.ProcessModel.Password, "AppPool Identity Password doesn't match!")
 
 		// Verify env vars are properly set for both altered and non-altered env vars for IIS 10+
-		if iisVersion, err := getVersion(); err != nil {
+		if iisVersion, err := GetVersion(); err != nil {
 			t.Fatal(err)
 		} else if iisVersion.Major >= 10 {
 			expectedAppPoolEnvVars := []appPoolAddEnvVar{
@@ -339,24 +339,24 @@ func TestWebsite(t *testing.T) {
 	}
 
 	// Verify that site settings match the given config
-	if site, err := getSite(guid, true); err != nil {
+	if site, err := GetSite(guid, true); err != nil {
 		t.Fatal("Failed to get Site info!")
 	} else {
 		assert.Equal(site.Site.Application.VDirs[0].PhysicalPath, websiteConfig.Path, "Website path doesn't match desired path from config!")
 	}
 
 	// Start the website
-	if err := startWebsite(guid); err != nil {
+	if err := StartWebsite(guid); err != nil {
 		t.Fatal(err)
 	}
 
 	// Ensure start website is idempotent
-	if err := startWebsite(guid); err != nil {
+	if err := StartWebsite(guid); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that the website is running
-	if isRunning, err := isWebsiteRunning(guid); err != nil {
+	if isRunning, err := IsWebsiteRunning(guid); err != nil {
 		t.Fatal(err)
 	} else if !isRunning {
 		t.Fatal("Website is not started!")
@@ -380,7 +380,7 @@ func TestWebsite(t *testing.T) {
 	}
 
 	// Verify that the website is deemed as not running
-	if isRunning, err := isWebsiteRunning(guid); err != nil {
+	if isRunning, err := IsWebsiteRunning(guid); err != nil {
 		t.Fatal(err)
 	} else if isRunning {
 		t.Fatal("Website is still running when Site is stopped!")
@@ -392,7 +392,7 @@ func TestWebsite(t *testing.T) {
 	}
 
 	// Verify that the website is deemed as running again
-	if isRunning, err := isWebsiteRunning(guid); err != nil {
+	if isRunning, err := IsWebsiteRunning(guid); err != nil {
 		t.Fatal(err)
 	} else if !isRunning {
 		t.Fatal("Website is not running when Site was started!")
@@ -404,7 +404,7 @@ func TestWebsite(t *testing.T) {
 	}
 
 	// Verify that the website is deemed as not running
-	if isRunning, err := isWebsiteRunning(guid); err != nil {
+	if isRunning, err := IsWebsiteRunning(guid); err != nil {
 		t.Fatal(err)
 	} else if isRunning {
 		t.Fatal("Website is still running when AppPool is stopped!")
@@ -416,41 +416,41 @@ func TestWebsite(t *testing.T) {
 	}
 
 	// Verify that the website is deemed as running again
-	if isRunning, err := isWebsiteRunning(guid); err != nil {
+	if isRunning, err := IsWebsiteRunning(guid); err != nil {
 		t.Fatal(err)
 	} else if !isRunning {
 		t.Fatal("Website is not running when AppPool was started!")
 	}
 
 	// Stop the website
-	if err := stopWebsite(guid); err != nil {
+	if err := StopWebsite(guid); err != nil {
 		t.Fatal(err)
 	}
 
 	// Ensure stop website is idempotent
-	if err := stopWebsite(guid); err != nil {
+	if err := StopWebsite(guid); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that the website is not running
-	if isRunning, err := isWebsiteRunning(guid); err != nil {
+	if isRunning, err := IsWebsiteRunning(guid); err != nil {
 		t.Fatal(err)
 	} else if isRunning {
 		t.Fatal("Website is not stopped!")
 	}
 
 	// Delete the website
-	if err := deleteWebsite(guid); err != nil {
+	if err := DeleteWebsite(guid); err != nil {
 		t.Fatal(err)
 	}
 
 	// Ensure delete website is idempotent
-	if err := deleteWebsite(guid); err != nil {
+	if err := DeleteWebsite(guid); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that the website is deleted
-	if exists, err := doesWebsiteExist(guid); err != nil {
+	if exists, err := DoesWebsiteExist(guid); err != nil {
 		t.Fatal(err)
 	} else {
 		assert.False(exists, "Website exists after deletion!")
@@ -463,7 +463,7 @@ func TestWebsiteWithConfig(t *testing.T) {
 	assert := assert.New(t)
 
 	// Clean any pre-existing websites
-	if err := purgeIIS(); err != nil {
+	if err := PurgeIIS(); err != nil {
 		t.Fatal("Error purging: ", err)
 	}
 
@@ -481,14 +481,14 @@ func TestWebsiteWithConfig(t *testing.T) {
 	websiteConfig.SiteConfigPath = filepath.Join(parentDir, "test", "testsite.xml")
 
 	// Create a website with the config and website name
-	if err := createWebsite(&websiteConfig); err != nil {
+	if err := CreateWebsite(&websiteConfig); err != nil {
 		t.Fatal(err)
 	}
 
 	websiteConfig.Env["EXAMPLE_ENV_VAR_ALT"] = "test789"
 
 	// Verify app pool settings match with given config
-	if appPool, err := getAppPool(guid, true); err != nil {
+	if appPool, err := GetAppPool(guid, true); err != nil {
 		t.Fatal("Failed to get Site info!")
 	} else {
 		assert.Equal("ApplicationPoolIdentity", appPool.Add.ProcessModel.IdentityType, "AppPool Identity Type doesn't match!")
@@ -500,7 +500,7 @@ func TestWebsiteWithConfig(t *testing.T) {
 		assert.Equal("Integrated", appPool.PipelineMode, "AppPool PipelineMode doesn't match!")
 
 		// Verify env vars are properly set for both altered and non-altered env vars for IIS 10+
-		if iisVersion, err := getVersion(); err != nil {
+		if iisVersion, err := GetVersion(); err != nil {
 			t.Fatal(err)
 		} else if iisVersion.Major >= 10 {
 			expectedAppPoolEnvVars := []appPoolAddEnvVar{
@@ -514,26 +514,26 @@ func TestWebsiteWithConfig(t *testing.T) {
 	}
 
 	// Verify that site settings match the given config
-	if site, err := getSite(guid, true); err != nil {
+	if site, err := GetSite(guid, true); err != nil {
 		t.Fatal("Failed to get Site info!")
 	} else {
 		assert.Equal(site.Site.Application.VDirs[0].PhysicalPath, websiteConfig.Path, "Website path doesn't match desired path from config!")
 	}
 
 	// Start the website
-	if err := startWebsite(guid); err != nil {
+	if err := StartWebsite(guid); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that the website is running
-	if isRunning, err := isWebsiteRunning(guid); err != nil {
+	if isRunning, err := IsWebsiteRunning(guid); err != nil {
 		t.Fatal(err)
 	} else if !isRunning {
 		t.Fatal("Website is not started!")
 	}
 
 	// Gather stats of the website's worker processes
-	stats, err := getWebsiteStats(guid)
+	stats, err := GetWebsiteStats(guid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -544,24 +544,24 @@ func TestWebsiteWithConfig(t *testing.T) {
 	assert.NotEqual(stats.UserModeTime, 0, "UserModeTime returned 0!")
 
 	// Stop the website
-	if err := stopWebsite(guid); err != nil {
+	if err := StopWebsite(guid); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that the website is not running
-	if isRunning, err := isWebsiteRunning(guid); err != nil {
+	if isRunning, err := IsWebsiteRunning(guid); err != nil {
 		t.Fatal(err)
 	} else if isRunning {
 		t.Fatal("Website is not stopped!")
 	}
 
 	// Delete the website
-	if err := deleteWebsite(guid); err != nil {
+	if err := DeleteWebsite(guid); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that the website is deleted
-	if exists, err := doesWebsiteExist(guid); err != nil {
+	if exists, err := DoesWebsiteExist(guid); err != nil {
 		t.Fatal(err)
 	} else {
 		assert.False(exists, "Website exists after deletion!")

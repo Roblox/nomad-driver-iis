@@ -10,7 +10,7 @@ endif
 
 default: build
 
-.PHONY: clean
+.PHONY: clean test
 clean:
 	${RMCMD} ${PLUGIN_BINARY}
 	vagrant destroy -f
@@ -24,5 +24,7 @@ up:
 converge: build up
 	  vagrant provision
 
-test:   converge
+test: converge
 	vagrant winrm -s cmd -c 'chdir C:\vagrant && go test ./iis/ -count=1 -v'
+	vagrant winrm -s cmd -c 'chdir C:\vagrant && go test ./test/e2e -count=1 -v'
+
