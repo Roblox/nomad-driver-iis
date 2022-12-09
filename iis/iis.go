@@ -186,7 +186,7 @@ type IISVersion struct {
 
 // Gets the exe version string of InetMgr.exe
 func getVersionStr() (string, error) {
-	cmd := exec.Command("cmd", "/C", `wmic datafile where name='C:\\Windows\\System32\\inetsrv\\InetMgr.exe' get version`)
+	cmd := exec.Command("cmd", "/C", `wmic datafile where name='C:\\Windows\\System32\\inetsrv\\appcmd.exe' get version`)
 	if out, err := cmd.Output(); err != nil {
 		return "", fmt.Errorf("Failed to determine version: %v", err)
 	} else {
