@@ -7,7 +7,7 @@ on:
  
 jobs:
   call-clabot-workflow:
-    uses: Roblox/cla-signature-bot/.github/workflows/clabot-workflow.yml@master
+    uses: Roblox/cla-signature-bot/.github/workflows/clabot-workflow.yml@8fe3da6e8988805ed44ca969c4a469921e037682
     with:
       whitelist: "shishir-a412ed,chuckyz,vulfox,cliffchapmanrbx"
       use-remote-repo: true
