@@ -11,15 +11,57 @@ Each allocation will create an application pool and site with the name being the
 This driver is heavily tested on Windows 2016+ and does not guarantee compatibility with older versions of Windows/IIS. IIS version and Windows versions are locked together and can be seen [here](https://en.wikipedia.org/wiki/Internet_Information_Services). Each feature/config has a minimum IIS version associated so that one can dance around them to have nomad and the IIS driver work on an older machine. The easiest way to utilize unique features for a given IIS version should be to use the application pool and site config imports provided by the task config.
 
 ---
-## Configuration
-### **Driver Config**
+## Nomad Client Requirements
+
+`nomad-driver-iis` requires the following:
+
+- Windows 2016+
+- Web Server enabled for IIS
+- The Nomad IIS driver binary
+
+## Nomad Networking
+
+Currently, `nomad-driver-iis` only supports host networking. No special configuration is needed as `nomad-driver-iis`
+relies on IIS to manage the networking for Windows IIS website tasks.
+
+## Nomad Plugin Options
+
+```hcl
+plugin "win_iis" {
+  client {
+    enabled = true
+    stats_interval = "30s"
+  }
+}
+```
 
 | Option | Type | Required | Default | Description |
 | :---: | :---: | :---: | :---: | :--- |
 | **enabled** | bool | no | true | Enable/Disable task driver. |
 | **stats_interval** | string | no | 1s | Interval for collecting `TaskStats` |
 
+Please note the plugin name should match whatever name you have specified for
+the external driver in the plugin_dir directory.
+
+## Task Driver Configuration
+
 ### **Task Config**
+
+```hcl
+task "iis-test" {
+  driver = "win_iis"
+
+  config {
+    path = "C:\\inetpub\\wwwroot"
+    apppool_identity {
+      identity="SpecificUser"
+      username="vagrant"
+      password="vagrant"
+    }
+  }
+}
+```
+
 | Option | Type | Required | Default | Min. IIS Version | Description |
 | :---: | :---: | :---: | :---: | :---: | :--- |
 | **path** | string | yes | nil | 6.0 | Path to IIS Compatible website directory. |
